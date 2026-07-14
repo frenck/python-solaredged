@@ -972,6 +972,27 @@ async def test_update_blank_inverter_block_raises(
         await client.async_update()
 
 
+async def test_update_partial_block_read_raises(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """A block refused mid-poll surfaces as a connection error, not silent None.
+
+    modbus-connection raises on a partial block read rather than blanking the
+    values that did not come back (a ``BlockReadError``, itself a ``ModbusError``).
+    Here the always-present inverter block is refused after a clean probe, and
+    ``async_update`` wraps that as a connection error instead of handing back a
+    half-empty device.
+    """
+    seed(mock_modbus_unit, FIXTURE)
+    client = await SolarEdge.async_probe(mock_modbus_unit)
+
+    # Refuse any pooled read that spans the inverter model block.
+    mock_modbus_unit.fail_read(40069, ModbusExceptionError(4))
+
+    with pytest.raises(SolarEdgeConnectionError):
+        await client.async_update()
+
+
 async def test_update_wraps_connection_error(
     mock_modbus_connection: MockModbusConnection, mock_modbus_unit: MockModbusUnit
 ) -> None:
