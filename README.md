@@ -274,6 +274,7 @@ SOFTWARE.
 [frenck]: https://github.com/frenck
 [github-sponsors-shield]: https://frenck.dev/wp-content/uploads/2019/12/github_sponsor.png
 [github-sponsors]: https://github.com/sponsors/frenck
+[license-shield]: https://img.shields.io/github/license/frenck/python-solaredged.svg
 [maintenance-shield]: https://img.shields.io/maintenance/yes/2026.svg
 [modbus-blog]: https://developers.home-assistant.io/blog/2026/07/05/modernizing-modbus/
 [modbus-connection]: https://home-assistant-libs.github.io/modbus-connection/
