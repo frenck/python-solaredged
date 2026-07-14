@@ -70,15 +70,15 @@ connection is the more reliable choice. Instructions adapted from the community
 pip install solaredged
 ```
 
-To install with the optional CLI:
+To install with the optional CLI, which drives the tmodbus backend:
 
 ```bash
-pip install "solaredged[cli]"
+pip install "solaredged[cli,tmodbus]"
 ```
 
-The library talks to a `ModbusUnit`; pick a backend with the matching extra,
-`solaredged[pymodbus]` or `solaredged[tmodbus]`, or let your application supply
-one.
+As a library, `solaredged` talks to a `ModbusUnit`; pick a backend with the
+matching extra, `solaredged[pymodbus]` or `solaredged[tmodbus]`, or let your
+application supply one.
 
 ## Usage
 

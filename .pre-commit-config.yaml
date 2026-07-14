@@ -114,6 +114,7 @@ repos:
         name: "\U0001F31F Starring code with pylint"
         language: system
         types: [python]
+        exclude: ^tests/
         entry: poetry run pylint
       - id: pytest
         name: "\U0001F9EA Running tests and test coverage with pytest"
