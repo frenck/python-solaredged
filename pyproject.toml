@@ -1,0 +1,145 @@
+[project]
+name = "solaredged"
+version = "0.0.0"
+description = "Asynchronous Python client for SolarEdge inverters over Modbus."
+authors = [{ name = "Franck Nijhof", email = "opensource@frenck.dev" }]
+maintainers = [{ name = "Franck Nijhof", email = "opensource@frenck.dev" }]
+license = "MIT"
+requires-python = ">=3.12"
+readme = "README.md"
+keywords = [
+  "async",
+  "client",
+  "energy",
+  "home-assistant",
+  "home-automation",
+  "inverter",
+  "iot",
+  "modbus",
+  "photovoltaic",
+  "pv",
+  "smart-home",
+  "solar",
+  "solaredge",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Framework :: AsyncIO",
+  "Intended Audience :: Developers",
+  "Natural Language :: English",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Programming Language :: Python :: 3",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dynamic = ["dependencies"]
+packages = [{ include = "solaredged", from = "src" }]
+dependencies = ['modbus-connection (>=3.6.0)']
+
+[project.optional-dependencies]
+cli = ["rich>=14.0.0", "textual>=8.0.0,<9.0.0; python_version<'4.0'", "textual-plotext>=1.0.0,<2.0.0; python_version<'4.0'", "typer>=0.15.1"]
+pymodbus = ["modbus-connection[pymodbus] (>=3.6.0)"]
+tmodbus = ["modbus-connection[tmodbus] (>=3.6.0)"]
+
+[project.scripts]
+solaredged = "solaredged._cli:main"
+
+[tool.poetry]
+requires-poetry = '>=2.0'
+
+[project.urls]
+homepage = "https://github.com/frenck/python-solaredged"
+repository = "https://github.com/frenck/python-solaredged"
+documentation = "https://github.com/frenck/python-solaredged"
+"Bug Tracker" = "https://github.com/frenck/python-solaredged/issues"
+Changelog = "https://github.com/frenck/python-solaredged/releases"
+
+[tool.poetry.group.dev.dependencies]
+codespell = "2.4.2"
+covdefaults = "2.3.0"
+coverage = { version = "7.15.1", extras = ["toml"] }
+hypothesis = "6.156.6"
+ty = "0.0.59"
+pre-commit-hooks = "6.0.0"
+prek = "0.4.9"
+pylint = "4.0.6"
+pytest = "9.1.1"
+pytest-asyncio = "1.4.0"
+pytest-cov = "7.1.0"
+ruff = "0.15.21"
+syrupy = "5.5.3"
+typer = "0.26.8"
+yamllint = "1.38.0"
+zizmor = "1.27.0"
+
+[tool.coverage.run]
+plugins = ["covdefaults"]
+source = ["solaredged"]
+
+[tool.coverage.report]
+show_missing = true
+omit = [
+  "src/solaredged/_cli.py",
+  "src/solaredged/cli/async_typer.py",
+  "src/solaredged/cli/tui.py",
+]
+
+[tool.ty.environment]
+python-version = "3.12"
+
+[tool.pylint.MASTER]
+ignore = ["tests"]
+
+[tool.pylint.BASIC]
+good-names = ["_", "ex", "fp", "i", "id", "j", "k", "on", "Run", "T"]
+
+[tool.pylint.DESIGN]
+max-attributes = 50
+max-locals = 30
+
+[tool.pylint."MESSAGES CONTROL"]
+disable = ["duplicate-code", "format", "unsubscriptable-object", "wrong-import-order"]
+
+[tool.pylint.SIMILARITIES]
+ignore-imports = true
+
+[tool.pylint.FORMAT]
+max-line-length = 88
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+addopts = "--strict-markers --strict-config"
+xfail_strict = true
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+  "ANN401",  # Opinionated warning on disallowing dynamically typed expressions
+  "TRY301",  # Abstract raise to inner function — not useful for this codebase
+  "D203",    # Conflicts with other rules
+  "D213",    # Conflicts with other rules
+  "D417",    # False positives in some occasions
+  "PLR2004", # Just annoying, not really useful
+
+  # Conflicts with the Ruff formatter
+  "COM812",
+  "ISC001",
+]
+
+[tool.ruff.lint.flake8-pytest-style]
+mark-parentheses = false
+fixture-parentheses = false
+
+[tool.ruff.lint.isort]
+known-first-party = ["solaredged"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 25
+
+[tool.codespell]
+ignore-words-list = "dout,hass,modul"
+
+[build-system]
+requires = ["poetry-core>=2.0"]
+build-backend = "poetry.core.masonry.api"

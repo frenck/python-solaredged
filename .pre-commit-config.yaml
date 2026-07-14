@@ -1,0 +1,141 @@
+---
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: "\U0001F436 Ruff Linter"
+        language: system
+        types: [python]
+        entry: poetry run ruff check --fix
+        require_serial: true
+        stages: [commit, push, manual]
+      - id: ruff-format
+        name: "\U0001F436 Ruff Formatter"
+        language: system
+        types: [python]
+        entry: poetry run ruff format
+        require_serial: true
+        stages: [commit, push, manual]
+      - id: check-ast
+        name: "\U0001F40D Check Python AST"
+        language: system
+        types: [python]
+        entry: poetry run check-ast
+      - id: check-case-conflict
+        name: "\U0001F520 Check for case conflicts"
+        language: system
+        entry: poetry run check-case-conflict
+      - id: check-docstring-first
+        name: "\u2139\uFE0F  Check docstring is first"
+        language: system
+        types: [python]
+        entry: poetry run check-docstring-first
+      - id: check-executables-have-shebangs
+        name: "\U0001F9D0 Check that executables have shebangs"
+        language: system
+        types: [text, executable]
+        entry: poetry run check-executables-have-shebangs
+        stages: [commit, push, manual]
+      - id: check-json
+        name: "\uFF5B Check JSON files"
+        language: system
+        types: [json]
+        entry: poetry run check-json
+      - id: check-merge-conflict
+        name: "\U0001F4A5 Check for merge conflicts"
+        language: system
+        types: [text]
+        entry: poetry run check-merge-conflict
+      - id: check-symlinks
+        name: "\U0001F517 Check for broken symlinks"
+        language: system
+        types: [symlink]
+        entry: poetry run check-symlinks
+      - id: check-toml
+        name: "\u2705 Check TOML files"
+        language: system
+        types: [toml]
+        entry: poetry run check-toml
+      - id: check-xml
+        name: "\u2705 Check XML files"
+        entry: check-xml
+        language: system
+        types: [xml]
+      - id: check-yaml
+        name: "\u2705 Check YAML files"
+        language: system
+        types: [yaml]
+        entry: poetry run check-yaml
+      - id: codespell
+        name: "\u2705 Check code for common misspellings"
+        language: system
+        types: [text]
+        exclude: ^poetry\.lock$
+        entry: poetry run codespell
+      - id: detect-private-key
+        name: "\U0001F575\uFE0F  Detect Private Keys"
+        language: system
+        types: [text]
+        entry: poetry run detect-private-key
+      - id: end-of-file-fixer
+        name: "\u2B90  Fix End of Files"
+        language: system
+        types: [text]
+        exclude: ^tests/(?:.*/)?__snapshots__/
+        entry: poetry run end-of-file-fixer
+        stages: [commit, push, manual]
+      - id: ty
+        name: "\U0001F18E Static type checking using ty"
+        language: system
+        types: [python]
+        entry: poetry run ty check
+        require_serial: true
+      - id: no-commit-to-branch
+        name: "\U0001F6D1 Don't commit to main branch"
+        language: system
+        entry: poetry run no-commit-to-branch
+        pass_filenames: false
+        always_run: true
+        args:
+          - --branch=main
+      - id: poetry
+        name: "\U0001F4DC Check pyproject with Poetry"
+        language: system
+        entry: poetry check
+        pass_filenames: false
+        always_run: true
+      - id: prettier
+        name: "\U0001F484 Ensuring files are prettier"
+        language: system
+        types: [yaml, json, markdown]
+        entry: npm run prettier
+        pass_filenames: false
+      - id: pylint
+        name: "\U0001F31F Starring code with pylint"
+        language: system
+        types: [python]
+        entry: poetry run pylint
+      - id: pytest
+        name: "\U0001F9EA Running tests and test coverage with pytest"
+        language: system
+        types: [python]
+        entry: poetry run pytest --cov solaredged tests
+        pass_filenames: false
+      - id: trailing-whitespace
+        name: "\u2704  Trim Trailing Whitespace"
+        language: system
+        types: [text]
+        exclude: ^tests/(?:.*/)?__snapshots__/
+        entry: poetry run trailing-whitespace-fixer
+        stages: [commit, push, manual]
+      - id: yamllint
+        name: "\U0001F397  Check YAML files with yamllint"
+        language: system
+        types: [yaml]
+        entry: poetry run yamllint
+      - id: zizmor
+        name: "\U0001F308 Check GitHub Actions workflows with zizmor"
+        language: system
+        types: [yaml]
+        files: ^\.github/workflows/
+        entry: poetry run zizmor

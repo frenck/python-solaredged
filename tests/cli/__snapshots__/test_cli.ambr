@@ -1,0 +1,31 @@
+# serializer version: 1
+# name: test_info
+  '''
+  
+    ☀️  SolarEdge  SE17K-RW0T0BNN4
+    Serial 7E1DBB39 • firmware 0004.0021.0023
+  
+  ╭────────────────── Inverter ──────────────────╮
+  │   🔌 Status          ☀️  Producing           │
+  │   🔌 Grid            On-grid                 │
+  │   ⚡ AC power        865.0 W                 │
+  │   📈 DC power        878.1 W                 │
+  │   🔌 AC              228.9 V  ·  3.95 A      │
+  │   🔄 Frequency       49.98 Hz                │
+  │   🔋 Lifetime        43934840 Wh             │
+  │   🌡️  Heatsink       38.88 °C                │
+  ╰──────────────────────────────────────────────╯
+  ╭────────────────── Controls ──────────────────╮
+  │   ⚡ Power limit            100 %            │
+  │   📐 Cos φ                  1.0              │
+  │   📤 Export mode            Disabled         │
+  │   📤 Export limit           —                │
+  │   📤 Ext. prod. max         0.0 W            │
+  │   🔧 Reactive mode          Fixed Cosphi     │
+  │   🔧 Adv. power ctrl        Off              │
+  │   🔋 Storage mode           Disabled         │
+  │   🛡️  Backup reserve        0.0 %            │
+  ╰──────────────────────────────────────────────╯
+  
+  '''
+# ---

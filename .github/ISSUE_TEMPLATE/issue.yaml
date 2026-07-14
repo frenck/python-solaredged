@@ -1,0 +1,61 @@
+---
+name: Issue
+description: Report an issue with the SolarEdge Python client.
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear description of what the issue is.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The version of the SolarEdge Python client.
+      placeholder: e.g., 1.0.0
+    validations:
+      required: true
+  - type: input
+    id: inverter-model
+    attributes:
+      label: Inverter model
+      description: The model name of your SolarEdge inverter.
+      placeholder: e.g., SE7K, SE10K-RWS
+    validations:
+      required: false
+  - type: input
+    id: firmware-version
+    attributes:
+      label: Firmware version
+      description: The firmware (CPU) version reported by the inverter.
+      placeholder: e.g., 4.20.42
+    validations:
+      required: false
+  - type: input
+    id: meters-batteries
+    attributes:
+      label: Meters and batteries
+      description: Any meters or batteries attached, with their models.
+      placeholder: e.g., SE-MTR-3Y-400V meter, LG RESU10H battery
+    validations:
+      required: false
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Modbus backend
+      description: Which modbus-connection backend you are using.
+      options:
+        - pymodbus
+        - tmodbus
+        - Not sure
+    validations:
+      required: false
+  - type: textarea
+    id: additional-information
+    attributes:
+      label: Additional information
+      description: Any logs, tracebacks, or other context.
+    validations:
+      required: false

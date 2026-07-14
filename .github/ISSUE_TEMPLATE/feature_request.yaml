@@ -1,0 +1,26 @@
+---
+name: Feature request
+description: Suggest a new feature for the SolarEdge Python client.
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear description of the feature you'd like to see.
+    validations:
+      required: true
+  - type: input
+    id: inverter-model
+    attributes:
+      label: Inverter model
+      description: The SolarEdge inverter this relates to (if relevant).
+      placeholder: e.g., SE7K, SE10K-RWS
+    validations:
+      required: false
+  - type: textarea
+    id: additional-information
+    attributes:
+      label: Additional information
+      description: Any additional context, examples, or references.
+    validations:
+      required: false
