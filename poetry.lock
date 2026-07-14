@@ -1144,4 +1144,4 @@ tmodbus = ["modbus-connection"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12"
-content-hash = "cf1f46499c2c61626bbfbd7da9d18968ca74b8346114be12b1b77387157281dc"
+content-hash = "6fb2aa0bb91d297b37e1b3ba4100576b17c4e006d0b85eb1cb94974c3dfa3a5b"

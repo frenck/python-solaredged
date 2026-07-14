@@ -6,6 +6,12 @@ the authoritative model definitions (vendored under ``fixtures/sunspec``, from
 the Apache-2.0 ``sunspec/models`` project). This catches an off-by-one address,
 a wrong sign, or a misrouted scale register independently of any device dump.
 
+Two independent oracles resolve those definitions. One parses the model JSON
+here; the other runs ``modbus-connection``'s own official-model generator and
+reads back the fields it produces. Agreement between the two means our hand
+declarations match both the raw spec and how the framework itself would model
+it, so a regenerated map would land on the same layout.
+
 The SolarEdge proprietary blocks (battery, storage, export, power control) are
 not part of SunSpec and are not checked here.
 """
@@ -15,6 +21,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
+
+from modbus_connection.model.sunspec import SunSpecComponent
+from modbus_connection.model.sunspec.generate import generate_source
 
 from solaredged.components import Common, Inverter, Meter
 
@@ -64,6 +73,46 @@ def _spec_index(model_file: str, base: int) -> dict[int, _Point]:
     return index
 
 
+def _generated_index(model_file: str, base: int) -> dict[int, _Point]:
+    """Index a model's points as ``modbus-connection``'s generator resolves them.
+
+    The second oracle: rather than parse the JSON ourselves, run the
+    official-model generator and read back the fields it emits. Generated
+    addresses are model-relative (the model starts at zero), so they shift by
+    ``base`` to the absolute address our fields declare.
+    """
+    model = json.loads((_SPEC_DIR / model_file).read_text())
+
+    # Give the generated module a stable identity before executing it.
+    namespace: dict[str, object] = {"__name__": model_file}
+    exec(compile(generate_source([model]), model_file, "exec"), namespace)  # noqa: S102
+
+    component = next(
+        (
+            obj
+            for obj in namespace.values()
+            if isinstance(obj, type)
+            and issubclass(obj, SunSpecComponent)
+            and obj is not SunSpecComponent
+        ),
+        None,
+    )
+    assert component is not None, f"generator produced no component for {model_file}"
+
+    index: dict[int, _Point] = {}
+    for name, field in component._register_fields.items():
+        scale = (
+            base + field.scale_register if field.scale_register is not None else None
+        )
+        index[base + field.address] = _Point(
+            name=name,
+            signed=getattr(field, "signed", False),
+            size=field.count,
+            scale_register=scale,
+        )
+    return index
+
+
 def _assert_conforms(
     component: type[Component],
     spec: dict[int, _Point],
@@ -95,20 +144,26 @@ def test_common_block_matches_sunspec_model_1() -> None:
     """The inverter identity block conforms to the SunSpec common model."""
     # The "SunS" marker occupies 40000-40001, so the common model starts at 40002.
     _assert_conforms(Common, _spec_index("model_1.json", 40002))
+    _assert_conforms(Common, _generated_index("model_1.json", 40002))
 
 
 def test_inverter_block_matches_sunspec_model_103() -> None:
     """The inverter measurement block conforms to SunSpec model 103."""
-    spec = _spec_index("model_103.json", 40069)
-
     # _grid_status and vendor_status_extended are SolarEdge proprietary points
     # that reuse registers in this block; they are not standard SunSpec.
-    _assert_conforms(
-        Inverter, spec, skip=frozenset({"_grid_status", "vendor_status_extended"})
-    )
+    skip = frozenset({"_grid_status", "vendor_status_extended"})
+
+    _assert_conforms(Inverter, _spec_index("model_103.json", 40069), skip=skip)
+    _assert_conforms(Inverter, _generated_index("model_103.json", 40069), skip=skip)
 
 
 def test_meter_block_matches_sunspec() -> None:
     """The meter identity and measurement blocks conform to SunSpec models 1 + 203."""
-    spec = _spec_index("model_1.json", 40121) | _spec_index("model_203.json", 40188)
-    _assert_conforms(Meter, spec)
+    _assert_conforms(
+        Meter, _spec_index("model_1.json", 40121) | _spec_index("model_203.json", 40188)
+    )
+    _assert_conforms(
+        Meter,
+        _generated_index("model_1.json", 40121)
+        | _generated_index("model_203.json", 40188),
+    )

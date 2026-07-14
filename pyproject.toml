@@ -35,12 +35,12 @@ classifiers = [
 ]
 dynamic = ["dependencies"]
 packages = [{ include = "solaredged", from = "src" }]
-dependencies = ['modbus-connection (>=3.6.0)']
+dependencies = ['modbus-connection (>=3.7.0)']
 
 [project.optional-dependencies]
 cli = ["rich>=14.0.0", "textual>=8.0.0,<9.0.0; python_version<'4.0'", "textual-plotext>=1.0.0,<2.0.0; python_version<'4.0'", "typer>=0.15.1"]
-pymodbus = ["modbus-connection[pymodbus] (>=3.6.0)"]
-tmodbus = ["modbus-connection[tmodbus] (>=3.6.0)"]
+pymodbus = ["modbus-connection[pymodbus] (>=3.7.0)"]
+tmodbus = ["modbus-connection[tmodbus] (>=3.7.0)"]
 
 [project.scripts]
 solaredged = "solaredged._cli:main"
