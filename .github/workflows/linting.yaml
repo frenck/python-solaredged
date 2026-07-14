@@ -142,7 +142,7 @@ jobs:
           poetry config virtualenvs.create true
           poetry config virtualenvs.in-project true
       - name: 🏗 Install Python dependencies
-        run: poetry install --no-interaction
+        run: poetry install --no-interaction --all-extras
       - name: 🚀 Run pylint
         run: poetry run prek run pylint --all-files
 
