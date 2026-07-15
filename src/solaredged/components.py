@@ -327,12 +327,40 @@ class Inverter(SolarEdgeComponent):
     status = enum16(40107, InverterStatus)
     vendor_status = uint16(40108)
 
-    # Grid on/off status (word-swapped uint32) and extended vendor status. Both
-    # sit inside the always-present model block, so they need no separate probe.
+    @property
+    def on_grid(self) -> bool | None:
+        """Whether the inverter is grid-connected; None without the extension.
+
+        The grid status registers are a SolarEdge extension not served by all
+        firmware; :class:`InverterExtended` carries the real implementation.
+        """
+        return None
+
+    @property
+    def vendor_status_extended(self) -> int | None:
+        """The extended vendor status; None without the extension.
+
+        Lives in the same extension block as the grid status;
+        :class:`InverterExtended` carries the real field.
+        """
+        return None
+
+
+class InverterExtended(Inverter):
+    """An inverter that also serves the grid status extension (base 40113).
+
+    Grid on/off status (word-swapped uint32) and extended vendor status sit
+    past the standard model points. Not all firmware serves them: reading them
+    on an inverter that does not answers with a Modbus exception, and because
+    reads are pooled that would take the whole inverter poll down with it.
+    ``async_probe`` detects the extension and picks this class only where it is
+    present.
+    """
+
     _grid_status = NumberField(
         40113, count=2, signed=False, nan=0xFFFF_FFFF, word_order="little"
     )
-    vendor_status_extended = uint32(40119)
+    vendor_status_extended = uint32(40119)  # type: ignore[assignment]
 
     @property
     def on_grid(self) -> bool | None:

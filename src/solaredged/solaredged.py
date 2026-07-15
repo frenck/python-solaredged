@@ -15,6 +15,7 @@ from .components import (
     Common,
     ExportControl,
     Inverter,
+    InverterExtended,
     Meter,
     Mmppt,
     PowerControl,
@@ -26,6 +27,7 @@ from .const import (
     BATTERY_COMMON_BASE,
     EV_CHARGER_MODEL_PREFIX,
     EXPORT_CONTROL_BASE,
+    GRID_STATUS_BASE,
     INVERTER_COMMON_BASE,
     METER_COUNT,
     METER_MODEL_BASE,
@@ -74,6 +76,7 @@ class SolarEdge:
         meter_shift: int = 0,
         batteries: int = 0,
         mmppt: bool = False,
+        grid_status: bool = False,
         storage_control: bool = False,
         export_control: bool = False,
         power_control: bool = False,
@@ -93,9 +96,12 @@ class SolarEdge:
 
         self._unit = unit
 
-        # Always present: the inverter identity and measurements.
+        # Always present: the inverter identity and measurements. The grid
+        # status extension is firmware-dependent; reading it on an inverter
+        # that lacks it would fail the whole pooled inverter read, so the
+        # extended component is only used where the extension is present.
         self.common = Common(unit)
-        self.inverter = Inverter(unit)
+        self.inverter = InverterExtended(unit) if grid_status else Inverter(unit)
         self.mmppt = Mmppt(unit) if mmppt else None
 
         # Attached sub-devices, addressed per unit by index / base offset.
@@ -175,9 +181,10 @@ class SolarEdge:
         """Detect the device layout on ``unit`` and return a ready instance.
 
         Validates the SunSpec header, counts the meters, and probes for the
-        battery and control blocks. Absent optional blocks (which answer with a
-        Modbus exception) are treated as not present; a genuine transport
-        failure raises :class:`SolarEdgeConnectionError`.
+        grid status extension and the battery and control blocks. Absent
+        optional blocks (which answer with a Modbus exception) are treated as
+        not present; a genuine transport failure raises
+        :class:`SolarEdgeConnectionError`.
         """
         try:
             header = await unit.read_holding_registers(INVERTER_COMMON_BASE, 4)
@@ -200,6 +207,7 @@ class SolarEdge:
                 meter_shift=meter_shift,
                 batteries=batteries,
                 mmppt=mmppt_units > 0,
+                grid_status=await cls._block_present(unit, GRID_STATUS_BASE),
                 storage_control=await cls._block_present(unit, STORAGE_CONTROL_BASE),
                 export_control=await cls._block_present(unit, EXPORT_CONTROL_BASE),
                 power_control=await cls._block_present(unit, POWER_CONTROL_BASE),

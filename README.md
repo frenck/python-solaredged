@@ -113,10 +113,12 @@ asyncio.run(main())
 ```
 
 `async_probe` validates the SunSpec header and detects which meters, batteries
-and control blocks are present. `async_update` refreshes every component in as
-few Modbus reads as possible. Values decode to `None` when the device reports a
-point as not implemented, and a battery state of energy or health outside
-0-100 (reported by initializing batteries) decodes to `None` as well.
+and control blocks are present, plus whether the firmware serves the grid
+status extension (not all firmware does). `async_update` refreshes every
+component in as few Modbus reads as possible. Values decode to `None` when the
+device reports a point as not implemented, `on_grid` is `None` on firmware
+without the extension, and a battery state of energy or health outside 0-100
+(reported by initializing batteries) decodes to `None` as well.
 
 See the [examples](examples) directory for more.
 
