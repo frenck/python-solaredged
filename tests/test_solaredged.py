@@ -463,6 +463,25 @@ async def test_site_limit_real_value(mock_modbus_unit: MockModbusUnit) -> None:
 # -- features ------------------------------------------------------------------
 
 
+async def test_inverter_lifetime_energy_zero_is_none(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """A lifetime energy of 0 decodes to None per acc32 semantics.
+
+    SunSpec defines 0 on an accumulator as "not accumulated", and some firmware
+    transiently reports it around the sleep/wake transition; a producing
+    inverter's lifetime counter is never genuinely 0.
+    """
+    seed(mock_modbus_unit, FIXTURE)
+    mock_modbus_unit.holding[40093] = 0
+    mock_modbus_unit.holding[40094] = 0
+
+    client = await SolarEdge.async_probe(mock_modbus_unit)
+    await client.async_update()
+
+    assert client.inverter.ac_energy is None
+
+
 async def test_grid_status(mock_modbus_unit: MockModbusUnit) -> None:
     """Grid on/off status decodes from the word-swapped status word."""
     seed(mock_modbus_unit, FIXTURE)

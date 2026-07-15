@@ -31,6 +31,7 @@ from modbus_connection.model.fields import (
     StringField,
 )
 from modbus_connection.model.sunspec import (
+    acc32,
     bitfield32,
     enum16,
     int16,
@@ -150,7 +151,8 @@ def _meter_energy(
     SunSpec types these as ``acc32`` (sentinel 0 = "not accumulated"), but we
     model them as ``uint32`` on purpose: a genuine 0 is a valid reading on a
     freshly commissioned meter, so it should decode to 0, not None. Do not
-    "fix" this back to ``acc32`` or real zeros start disappearing.
+    "fix" this back to ``acc32`` or real zeros start disappearing. The
+    inverter's own lifetime energy is the opposite case and is acc32 there.
     """
     return uint32(
         address,
@@ -313,7 +315,11 @@ class Inverter(SolarEdgeComponent):
     ac_va = int16(40087, scale_register=40088, unit="VA")
     ac_var = int16(40089, scale_register=40090, unit="var")
     ac_power_factor = int16(40091, scale_register=40092, unit="%")
-    ac_energy = uint32(40093, scale_register=40095, unit="Wh")
+    # acc32 on purpose: 0 means "not accumulated". Some firmware transiently
+    # reports 0 here around the sleep/wake transition, and a lifetime counter
+    # of a producing inverter is never genuinely 0 (unlike a meter's, see
+    # _meter_energy), so 0 decodes to None rather than pose as a reading.
+    ac_energy = acc32(40093, scale_register=40095, unit="Wh")
 
     dc_current = uint16(40096, scale_register=40097, unit="A")
     dc_voltage = uint16(40098, scale_register=40099, unit="V")
