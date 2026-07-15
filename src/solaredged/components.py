@@ -206,6 +206,13 @@ def _le_float32(
     )
 
 
+def _percentage(value: float | None) -> float | None:
+    """Normalise a percentage point: a value outside 0-100 decodes to None."""
+    if value is None or not 0 <= value <= 100:
+        return None
+    return value
+
+
 class SolarEdgeComponent(Component):
     """A ``Component`` whose writes raise the library's own connection error.
 
@@ -449,10 +456,28 @@ class Battery(SolarEdgeComponent):
     energy_max = _le_float32(57726, unit="Wh")
     energy_available = _le_float32(57728, unit="Wh")
 
-    state_of_health = _le_float32(57730, unit="%")
-    state_of_energy = _le_float32(57732, unit="%")
+    _state_of_health_raw = _le_float32(57730, unit="%")
+    _state_of_energy_raw = _le_float32(57732, unit="%")
 
     status = enum(57734, BatteryStatus, count=2, word_order="little", nan=0xFFFFFFFF)
+
+    @property
+    def state_of_health(self) -> float | None:
+        """Battery state of health in percent, or None when not meaningful.
+
+        An initializing battery (and the odd communication glitch) reports
+        values outside 0-100; those are garbage, not readings.
+        """
+        return _percentage(self._state_of_health_raw)
+
+    @property
+    def state_of_energy(self) -> float | None:
+        """Battery state of energy in percent, or None when not meaningful.
+
+        An initializing battery (and the odd communication glitch) reports
+        values outside 0-100; those are garbage, not readings.
+        """
+        return _percentage(self._state_of_energy_raw)
 
 
 class StorageControl(SolarEdgeComponent):

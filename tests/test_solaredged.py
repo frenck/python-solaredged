@@ -320,6 +320,49 @@ async def test_battery_readings(mock_modbus_unit: MockModbusUnit) -> None:
     assert battery.status is BatteryStatus.DISCHARGE
 
 
+@pytest.mark.parametrize("value", [-0.5, 100.5, float("inf")])
+async def test_battery_percentage_out_of_range_is_none(
+    mock_modbus_unit: MockModbusUnit, value: float
+) -> None:
+    """A battery state of energy or health outside 0-100 decodes to None.
+
+    An initializing battery (and the odd communication glitch) reports
+    percentages outside the meaningful range; those are garbage, not readings.
+    """
+    seed(mock_modbus_unit, FIXTURE)
+    _seed_battery(mock_modbus_unit, offset=0)
+    words = encode_float32(value, word_order="little")
+    for i, word in enumerate(words):
+        mock_modbus_unit.holding[57730 + i] = word  # state of health
+        mock_modbus_unit.holding[57732 + i] = word  # state of energy
+
+    client = await SolarEdge.async_probe(mock_modbus_unit)
+    await client.async_update()
+
+    battery = client.batteries[0]
+    assert battery.state_of_health is None
+    assert battery.state_of_energy is None
+
+
+async def test_battery_percentage_boundaries_kept(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """The 0 and 100 percent boundaries are genuine readings, not garbage."""
+    seed(mock_modbus_unit, FIXTURE)
+    _seed_battery(mock_modbus_unit, offset=0)
+    for i, word in enumerate(encode_float32(100.0, word_order="little")):
+        mock_modbus_unit.holding[57730 + i] = word  # state of health
+    for i, word in enumerate(encode_float32(0.0, word_order="little")):
+        mock_modbus_unit.holding[57732 + i] = word  # state of energy
+
+    client = await SolarEdge.async_probe(mock_modbus_unit)
+    await client.async_update()
+
+    battery = client.batteries[0]
+    assert battery.state_of_health == pytest.approx(100.0)
+    assert battery.state_of_energy == pytest.approx(0.0)
+
+
 async def test_second_battery_uses_base_offset(
     mock_modbus_unit: MockModbusUnit,
 ) -> None:
