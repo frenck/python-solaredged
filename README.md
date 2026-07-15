@@ -115,7 +115,8 @@ asyncio.run(main())
 `async_probe` validates the SunSpec header and detects which meters, batteries
 and control blocks are present. `async_update` refreshes every component in as
 few Modbus reads as possible. Values decode to `None` when the device reports a
-point as not implemented.
+point as not implemented, including a lifetime energy of 0 (SunSpec's "not
+accumulated", transiently reported by some firmware around sleep/wake).
 
 See the [examples](examples) directory for more.
 
