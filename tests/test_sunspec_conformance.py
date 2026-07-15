@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, NamedTuple
 from modbus_connection.model.sunspec import SunSpecComponent
 from modbus_connection.model.sunspec.generate import generate_source
 
-from solaredged.components import Common, Inverter, Meter
+from solaredged.components import Common, InverterExtended, Meter
 
 if TYPE_CHECKING:
     from modbus_connection.model import Component
@@ -148,13 +148,18 @@ def test_common_block_matches_sunspec_model_1() -> None:
 
 
 def test_inverter_block_matches_sunspec_model_103() -> None:
-    """The inverter measurement block conforms to SunSpec model 103."""
-    # _grid_status and vendor_status_extended are SolarEdge proprietary points
-    # that reuse registers in this block; they are not standard SunSpec.
+    """The inverter measurement block conforms to SunSpec model 103.
+
+    Checked through InverterExtended so the standard points and the SolarEdge
+    extension are covered in one pass; the extension's own points are
+    proprietary reuses of registers in this block, not standard SunSpec.
+    """
     skip = frozenset({"_grid_status", "vendor_status_extended"})
 
-    _assert_conforms(Inverter, _spec_index("model_103.json", 40069), skip=skip)
-    _assert_conforms(Inverter, _generated_index("model_103.json", 40069), skip=skip)
+    _assert_conforms(InverterExtended, _spec_index("model_103.json", 40069), skip=skip)
+    _assert_conforms(
+        InverterExtended, _generated_index("model_103.json", 40069), skip=skip
+    )
 
 
 def test_meter_block_matches_sunspec() -> None:

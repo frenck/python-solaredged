@@ -19,6 +19,7 @@ from syrupy.assertion import SnapshotAssertion
 from solaredged import (
     BatteryStatus,
     ExportControlMode,
+    InverterExtended,
     InverterStatus,
     ReactivePowerConfig,
     SolarEdge,
@@ -423,6 +424,7 @@ async def test_grid_status(mock_modbus_unit: MockModbusUnit) -> None:
     """Grid on/off status decodes from the word-swapped status word."""
     seed(mock_modbus_unit, FIXTURE)
     client = await SolarEdge.async_probe(mock_modbus_unit)
+    assert isinstance(client.inverter, InverterExtended)
     await client.async_update()
     assert client.inverter.on_grid is True  # fixture reports 0 -> on-grid
 
@@ -431,6 +433,31 @@ async def test_grid_status(mock_modbus_unit: MockModbusUnit) -> None:
         mock_modbus_unit.holding[40113 + i] = word
     await client.async_update()
     assert client.inverter.on_grid is False
+
+
+async def test_grid_status_extension_absent(mock_modbus_unit: MockModbusUnit) -> None:
+    """Firmware without the grid status extension still probes and polls."""
+    seed(mock_modbus_unit, FIXTURE)
+    mock_modbus_unit.fail_read(40113, ModbusExceptionError(2, "illegal data address"))
+
+    client = await SolarEdge.async_probe(mock_modbus_unit)
+    assert not isinstance(client.inverter, InverterExtended)
+
+    # The poll never touches the refused registers, so it keeps working.
+    await client.async_update()
+    assert client.inverter.ac_power is not None
+    assert client.inverter.on_grid is None
+    assert client.inverter.vendor_status_extended is None
+
+
+async def test_grid_status_constructor_flag(mock_modbus_unit: MockModbusUnit) -> None:
+    """The constructor picks the inverter component by the grid_status flag."""
+    seed(mock_modbus_unit, FIXTURE)
+    extended = SolarEdge(mock_modbus_unit, grid_status=True)
+    assert isinstance(extended.inverter, InverterExtended)
+
+    plain = SolarEdge(mock_modbus_unit)
+    assert not isinstance(plain.inverter, InverterExtended)
 
 
 async def test_meter_apparent_reactive_energy(mock_modbus_unit: MockModbusUnit) -> None:
