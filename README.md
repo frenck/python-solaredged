@@ -118,7 +118,9 @@ status extension (not all firmware does). `async_update` refreshes every
 component in as few Modbus reads as possible. Values decode to `None` when the
 device reports a point as not implemented, including a lifetime energy of 0
 (SunSpec's "not accumulated", transiently reported by some firmware around
-sleep/wake), and `on_grid` is `None` on firmware without the extension.
+sleep/wake). `on_grid` is `None` on firmware without the extension, and a
+battery state of energy or health outside 0-100 (reported by initializing
+batteries) decodes to `None` as well.
 
 See the [examples](examples) directory for more.
 
