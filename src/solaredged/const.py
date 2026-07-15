@@ -23,6 +23,10 @@ EV_CHARGER_MODEL_PREFIX = "SE-EV-SA"
 INVERTER_COMMON_BASE = 40000
 INVERTER_MODEL_BASE = 40069
 
+# SolarEdge's grid status extension (grid on/off, extended vendor status). Not
+# all firmware serves these registers, so their presence is probed.
+GRID_STATUS_BASE = 40113
+
 # Multiple-MPPT extension (SunSpec model 160). Shares base 40121 with meter 1
 # when absent; when present it shifts the meter blocks up (not handled here).
 MMPPT_BASE = 40121
