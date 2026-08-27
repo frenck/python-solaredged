@@ -72,6 +72,35 @@ class SunSpecDID(IntEnum):
     THREE_PHASE_DELTA_METER = 204
 
 
+# SunSpec model ids the discovered chain is searched for.
+COMMON_MODEL_ID = 1
+MMPPT_MODEL_ID = int(SunSpecDID.MULTIPLE_MPPT)
+
+INVERTER_MODEL_IDS = (
+    int(SunSpecDID.THREE_PHASE_INVERTER),
+    int(SunSpecDID.SPLIT_PHASE_INVERTER),
+    int(SunSpecDID.SINGLE_PHASE_INVERTER),
+)
+
+METER_DIDS = frozenset(
+    {
+        int(SunSpecDID.SINGLE_PHASE_METER),
+        int(SunSpecDID.SPLIT_PHASE_METER),
+        int(SunSpecDID.THREE_PHASE_WYE_METER),
+        int(SunSpecDID.THREE_PHASE_DELTA_METER),
+    }
+)
+
+# The inverter model without SolarEdge's grid status extension. A longer model
+# means this firmware serves it.
+INVERTER_BASE_LENGTH = 50
+
+# Meter slots, and the offset from a meter's common block to its model block
+# (the common model's own span).
+METER_SLOT_BASES = (40121, 40295, 40469)
+METER_MODEL_OFFSET = 67
+
+
 class InverterStatus(IntEnum):
     """Inverter operating state (SunSpec ``I_Status``)."""
 

@@ -31,7 +31,7 @@ from solaredged import (
     SunSpecDID,
 )
 
-from .conftest import seed
+from .conftest import chain_models, seed
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -63,7 +63,12 @@ def _seed_meter(unit: MockModbusUnit, index: int = 1, shift: int = 0) -> None:
     base = shift + 174 * (index - 1)
     holding = unit.holding
 
+    # The chain a real device serves: the meter's common block, then its model.
+    holding[40121 + base] = 1
+    holding[40122 + base] = 65
     holding[40188 + base] = int(SunSpecDID.THREE_PHASE_WYE_METER)
+    holding[40189 + base] = 105
+    holding[40295 + base] = 0xFFFF  # the chain ends after this meter
 
     # Current and power, each with its own scale factor.
     holding[40190 + base] = 850  # AC current raw
@@ -98,12 +103,17 @@ def _seed_mmppt(unit: MockModbusUnit, modules: int = 2) -> None:
 
     # Header: identifier, then the shared scale factors and module count.
     holding[40121] = 160  # DID
-    holding[40122] = 20  # length
+    # The model spans its eight header points plus one 20-register block per
+    # module, which is the span the chain reports as the meter shift.
+    holding[40122] = 8 + modules * 20
     holding[40123] = 0xFFFE  # DCA_SF = -2
     holding[40124] = 0xFFFF  # DCV_SF = -1
     holding[40125] = 0  # DCW_SF
     holding[40126] = 0  # DCWH_SF
     holding[40129] = modules
+
+    # The chain continues after the whole model unless a meter follows.
+    holding[40131 + modules * 20] = 0xFFFF
 
     # One 20-register block per DC module.
     for module in range(modules):
@@ -213,7 +223,7 @@ async def test_probe_transport_error_is_not_swallowed(
     seed(mock_modbus_unit, FIXTURE)
     # Header reads fine, but the meter probe drops the connection.
     unit = _PickyUnit(
-        mock_modbus_unit, fail_at={40188}, error=ModbusConnectionError("link lost")
+        mock_modbus_unit, fail_at={40121}, error=ModbusConnectionError("link lost")
     )
 
     with pytest.raises(SolarEdgeConnectionError):
@@ -246,14 +256,47 @@ async def test_probe_counts_all_three_batteries(
     assert len(client.batteries) == 3
 
 
-async def test_mmppt_read_failure_treated_as_absent(
+async def test_a_chain_without_an_inverter_is_refused(
     mock_modbus_unit: MockModbusUnit,
 ) -> None:
-    """An MMPPT header that rejects the read is treated as absent, not an error."""
+    """A device whose chain carries no inverter model is not a SolarEdge inverter."""
+    with pytest.raises(SolarEdgeError, match="not a SolarEdge inverter"):
+        SolarEdge(mock_modbus_unit, {})
+
+
+async def test_a_meter_slot_holding_something_else_is_skipped(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """A common block at a meter slot without its meter model is not a meter."""
+    models = chain_models(meters=1)
+    # Drop the meter's own model, leaving the common block stranded.
+    del models[int(SunSpecDID.THREE_PHASE_WYE_METER)]
+
+    client = SolarEdge(mock_modbus_unit, models)
+
+    assert client.meters == []
+
+
+async def test_probe_wraps_a_failure_reading_the_proprietary_blocks(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """A transport failure after the chain walk still surfaces as a connection error."""
     seed(mock_modbus_unit, FIXTURE)
-    unit = _PickyUnit(mock_modbus_unit, fail_at={40121})  # MMPPT_BASE
-    client = await SolarEdge.async_probe(unit)  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
-    assert client.mmppt is None
+    mock_modbus_unit.fail_read(57666, ModbusConnectionError("link lost"))
+
+    with pytest.raises(SolarEdgeConnectionError):
+        await SolarEdge.async_probe(mock_modbus_unit)
+
+
+async def test_a_refused_model_header_fails_the_probe(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """A refused model header fails the walk: the chain has no hole to skip."""
+    seed(mock_modbus_unit, FIXTURE)
+    unit = _PickyUnit(mock_modbus_unit, fail_at={40121})  # where the chain continues
+
+    with pytest.raises(SolarEdgeConnectionError):
+        await SolarEdge.async_probe(unit)  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
 
 
 # -- decoding ------------------------------------------------------------------
@@ -299,7 +342,7 @@ async def test_meter_readings(mock_modbus_unit: MockModbusUnit) -> None:
     client = await SolarEdge.async_probe(mock_modbus_unit)
     await client.async_update()
 
-    meter = client.meters[0]
+    meter = client.meters[0].meter
     assert meter.did is SunSpecDID.THREE_PHASE_WYE_METER
     assert meter.ac_power == -800
     assert meter.ac_current == pytest.approx(8.5)  # 850 * 10**-2
@@ -515,10 +558,11 @@ async def test_grid_status_extension_absent(mock_modbus_unit: MockModbusUnit) ->
 async def test_grid_status_constructor_flag(mock_modbus_unit: MockModbusUnit) -> None:
     """The constructor picks the inverter component by the grid_status flag."""
     seed(mock_modbus_unit, FIXTURE)
-    extended = SolarEdge(mock_modbus_unit, grid_status=True)
+
+    extended = SolarEdge(mock_modbus_unit, chain_models(), grid_status=True)
     assert isinstance(extended.inverter, InverterExtended)
 
-    plain = SolarEdge(mock_modbus_unit)
+    plain = SolarEdge(mock_modbus_unit, chain_models())
     assert not isinstance(plain.inverter, InverterExtended)
 
 
@@ -534,7 +578,7 @@ async def test_meter_apparent_reactive_energy(mock_modbus_unit: MockModbusUnit) 
 
     client = await SolarEdge.async_probe(mock_modbus_unit)
     await client.async_update()
-    meter = client.meters[0]
+    meter = client.meters[0].meter
     assert meter.apparent_energy_exported == 50000
     assert meter.reactive_energy_q1 == 700
 
@@ -564,13 +608,19 @@ async def test_mmppt_absent(mock_modbus_unit: MockModbusUnit) -> None:
     assert client.mmppt is None
 
 
-async def test_mmppt_garbage_module_count(mock_modbus_unit: MockModbusUnit) -> None:
-    """An MMPPT header with an out-of-range module count is not treated as MMPPT."""
+async def test_the_chain_decides_the_extension_is_present(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """The chain decides the extension is there; the count only sizes it."""
     seed(mock_modbus_unit, FIXTURE)
-    mock_modbus_unit.holding[40121] = int(SunSpecDID.MULTIPLE_MPPT)
-    mock_modbus_unit.holding[40129] = 1  # only 2 or 3 modules are supported
+    _seed_mmppt(mock_modbus_unit, modules=2)
+    mock_modbus_unit.holding[40129] = 1  # fewer modules than the block holds
+
     client = await SolarEdge.async_probe(mock_modbus_unit)
-    assert client.mmppt is None
+    await client.async_update()
+
+    assert client.mmppt is not None
+    assert len(client.mmppt.modules) == 1
 
 
 async def test_mmppt_module_count_is_clamped(mock_modbus_unit: MockModbusUnit) -> None:
@@ -582,7 +632,7 @@ async def test_mmppt_module_count_is_clamped(mock_modbus_unit: MockModbusUnit) -
     seed(mock_modbus_unit, FIXTURE)
     _seed_mmppt(mock_modbus_unit, modules=2)
     mock_modbus_unit.holding[40129] = 5000  # hostile/garbled count
-    client = SolarEdge(mock_modbus_unit, mmppt=True)
+    client = SolarEdge(mock_modbus_unit, chain_models(mmppt=True))
     await client.async_update()
     assert client.mmppt is not None
     assert len(client.mmppt.modules) == 3  # clamped to the SolarEdge maximum
@@ -607,14 +657,12 @@ async def test_is_ev_charger_unknown_before_update(
     assert client.is_ev_charger is None
 
 
-def test_constructor_rejects_out_of_range_counts(
+def test_constructor_rejects_an_out_of_range_battery_count(
     mock_modbus_unit: MockModbusUnit,
 ) -> None:
-    """The constructor guards against meter/battery counts it cannot address."""
-    with pytest.raises(SolarEdgeError, match="meters"):
-        SolarEdge(mock_modbus_unit, meters=4)
+    """The constructor guards against a battery count it cannot address."""
     with pytest.raises(SolarEdgeError, match="batteries"):
-        SolarEdge(mock_modbus_unit, batteries=4)
+        SolarEdge(mock_modbus_unit, chain_models(), batteries=4)
 
 
 async def test_mmppt_shifts_meters(mock_modbus_unit: MockModbusUnit) -> None:
@@ -633,7 +681,7 @@ async def test_mmppt_shifts_meters(mock_modbus_unit: MockModbusUnit) -> None:
     assert len(client.meters) == 1
     await client.async_update()
 
-    meter = client.meters[0]
+    meter = client.meters[0].meter
     assert meter.did is SunSpecDID.THREE_PHASE_WYE_METER
     assert meter.ac_power == -800
     assert meter.ac_current == pytest.approx(8.5)  # proves scale register shifted
@@ -1043,21 +1091,15 @@ async def test_write_cache_reflects_device_readback(
 # -- error handling ------------------------------------------------------------
 
 
-async def test_update_blank_inverter_block_raises(
+async def test_a_blank_inverter_header_fails_the_read(
     mock_modbus_unit: MockModbusUnit,
 ) -> None:
-    """A device answering with a bogus inverter identity is surfaced, not hidden.
-
-    A zero or unknown model id decodes to None; the guard treats a missing
-    inverter identity as a read failure rather than returning a silently-blank
-    inverter. (A genuine partial block read raises upstream and is wrapped as a
-    connection error separately.)
-    """
+    """A device answering with a bogus inverter identity is surfaced, not hidden."""
     seed(mock_modbus_unit, FIXTURE)
     client = await SolarEdge.async_probe(mock_modbus_unit)
     mock_modbus_unit.holding[40069] = 0  # inverter DID -> not a member -> None
 
-    with pytest.raises(SolarEdgeConnectionError, match="no valid inverter data"):
+    with pytest.raises(SolarEdgeError, match="register map has changed"):
         await client.async_update()
 
 

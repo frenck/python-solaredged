@@ -18,7 +18,7 @@ import pytest
 
 from solaredged import SolarEdge
 
-from .conftest import FIXTURES_DIR, load_registers
+from .conftest import FIXTURES_DIR, add_chain, load_registers
 
 if TYPE_CHECKING:
     from modbus_connection.mock import MockModbusUnit
@@ -46,7 +46,10 @@ def _summary(client: SolarEdge) -> dict[str, object]:
     return {
         "common": _decoded(client.common),
         "inverter": _decoded(client.inverter),
-        "meters": [_decoded(meter) for meter in client.meters],
+        "meters": [
+            {"common": _decoded(m.common), "meter": _decoded(m.meter)}
+            for m in client.meters
+        ],
         "batteries": [_decoded(battery) for battery in client.batteries],
     }
 
@@ -64,6 +67,7 @@ async def test_decode_real_device(
 ) -> None:
     """A real device register map decodes to stable, plausible values."""
     mock_modbus_unit.holding.update(load_registers(f"community/{fixture}"))
+    add_chain(mock_modbus_unit)
 
     client = await SolarEdge.async_probe(mock_modbus_unit)
     await client.async_update()
@@ -77,8 +81,8 @@ async def test_decode_real_device(
     if inverter.ac_frequency is not None:
         assert 45 < inverter.ac_frequency < 65
     for meter in client.meters:
-        if meter.ac_frequency is not None:
-            assert 45 < meter.ac_frequency < 65
+        if meter.meter.ac_frequency is not None:
+            assert 45 < meter.meter.ac_frequency < 65
     for battery in client.batteries:
         if battery.state_of_energy is not None:
             assert 0 <= battery.state_of_energy <= 110
@@ -96,6 +100,7 @@ async def test_ev_charger_decodes_gracefully(mock_modbus_unit: MockModbusUnit) -
     inverter.
     """
     mock_modbus_unit.holding.update(load_registers(f"community/{_EV_CHARGER}"))
+    add_chain(mock_modbus_unit)
 
     client = await SolarEdge.async_probe(mock_modbus_unit)
     await client.async_update()

@@ -25,7 +25,7 @@ from modbus_connection.mock import MockModbusConnection
 from solaredged import SolarEdge, SunSpecDID
 from solaredged.exceptions import SolarEdgeError
 
-from .conftest import load_registers
+from .conftest import chain_models, load_registers
 
 _FIXTURE = "se17k_3phase.json"
 _BASE = load_registers(_FIXTURE)
@@ -109,9 +109,8 @@ def test_decode_survives_random_registers(registers: dict[int, int]) -> None:
 
         client = SolarEdge(
             unit,
-            meters=3,
+            chain_models(mmppt=True, meters=3),
             batteries=3,
-            mmppt=True,
             storage_control=True,
             export_control=True,
             power_control=True,
@@ -137,7 +136,7 @@ def test_write_int_field_never_crashes_raw(value: int) -> None:
 
     async def _run() -> None:
         connection = MockModbusConnection()
-        client = SolarEdge(connection.for_unit(1), power_control=True)
+        client = SolarEdge(connection.for_unit(1), chain_models(), power_control=True)
         assert client.power_control is not None
         with contextlib.suppress(SolarEdgeError):
             await client.power_control.write("active_power_limit", value)
@@ -154,6 +153,7 @@ def test_write_float_field_never_crashes_raw(value: float) -> None:
         connection = MockModbusConnection()
         client = SolarEdge(
             connection.for_unit(1),
+            chain_models(),
             storage_control=True,
             advanced_power_control=True,
         )

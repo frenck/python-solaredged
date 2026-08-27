@@ -28,9 +28,10 @@ from modbus_connection.model import uint32 as uint32_le
 from modbus_connection.model.fields import (
     FloatField,
     NumberField,
-    StringField,
 )
 from modbus_connection.model.sunspec import (
+    SunSpecComponent,
+    SunSpecModel,
     acc32,
     bitfield32,
     enum16,
@@ -43,7 +44,6 @@ from modbus_connection.model.sunspec import (
 from .const import (
     EXPORT_EXTERNAL_PRODUCTION_BIT,
     EXPORT_NEGATIVE_SITE_LIMIT_BIT,
-    METER_STRIDE,
     BatteryStatus,
     ExportControlLimit,
     ExportControlMode,
@@ -60,6 +60,8 @@ from .exceptions import SolarEdgeConnectionError, SolarEdgeError
 if TYPE_CHECKING:
     from collections.abc import Callable
     from enum import IntEnum
+
+    from modbus_connection import ModbusUnit
 
 
 # -- write validators ----------------------------------------------------------
@@ -138,8 +140,6 @@ def _meter_int16(address: int, scale_register: int) -> NumberField[float]:
     return int16(
         address,
         scale_register=scale_register,
-        scale_register_stride=METER_STRIDE,
-        stride=METER_STRIDE,
     )
 
 
@@ -157,15 +157,8 @@ def _meter_energy(
     return uint32(
         address,
         scale_register=scale_register,
-        scale_register_stride=METER_STRIDE,
-        stride=METER_STRIDE,
         unit=unit,
     )
-
-
-def _meter_string(address: int, length: int) -> StringField:
-    """Build a meter identity string."""
-    return string(address, length, stride=METER_STRIDE)
 
 
 # -- proprietary block helpers ------------------------------------------------
@@ -282,56 +275,60 @@ class SolarEdgeComponent(Component):
             raise SolarEdgeError(msg) from err
 
 
-class Common(SolarEdgeComponent):
-    """Inverter identity (SunSpec common block, base 40000)."""
+class Common(SunSpecComponent, SolarEdgeComponent):
+    """Identity (SunSpec model 1).
 
-    manufacturer = string(40004, 16)
-    model = string(40020, 16)
-    option = string(40036, 8)
-    version = string(40044, 8)
-    serial_number = string(40052, 16)
-    device_address = uint16(40068)
+    Serves the inverter's own common block and each meter's, which are the same
+    SunSpec model at different addresses.
+    """
+
+    manufacturer = string(2, 16)
+    model = string(18, 16)
+    option = string(34, 8)
+    version = string(42, 8)
+    serial_number = string(50, 16)
+    device_address = uint16(66)
 
 
-class Inverter(SolarEdgeComponent):
-    """Inverter measurements and state (SunSpec model 101/102/103, base 40069)."""
+class Inverter(SunSpecComponent, SolarEdgeComponent):
+    """Inverter measurements and state (SunSpec model 101/102/103)."""
 
-    did = enum16(40069, SunSpecDID)
+    did = enum16(0, SunSpecDID)
 
-    ac_current = uint16(40071, scale_register=40075, unit="A")
-    ac_current_a = uint16(40072, scale_register=40075, unit="A")
-    ac_current_b = uint16(40073, scale_register=40075, unit="A")
-    ac_current_c = uint16(40074, scale_register=40075, unit="A")
+    ac_current = uint16(2, scale_register=6, unit="A")
+    ac_current_a = uint16(3, scale_register=6, unit="A")
+    ac_current_b = uint16(4, scale_register=6, unit="A")
+    ac_current_c = uint16(5, scale_register=6, unit="A")
 
-    ac_voltage_ab = uint16(40076, scale_register=40082, unit="V")
-    ac_voltage_bc = uint16(40077, scale_register=40082, unit="V")
-    ac_voltage_ca = uint16(40078, scale_register=40082, unit="V")
-    ac_voltage_an = uint16(40079, scale_register=40082, unit="V")
-    ac_voltage_bn = uint16(40080, scale_register=40082, unit="V")
-    ac_voltage_cn = uint16(40081, scale_register=40082, unit="V")
+    ac_voltage_ab = uint16(7, scale_register=13, unit="V")
+    ac_voltage_bc = uint16(8, scale_register=13, unit="V")
+    ac_voltage_ca = uint16(9, scale_register=13, unit="V")
+    ac_voltage_an = uint16(10, scale_register=13, unit="V")
+    ac_voltage_bn = uint16(11, scale_register=13, unit="V")
+    ac_voltage_cn = uint16(12, scale_register=13, unit="V")
 
-    ac_power = int16(40083, scale_register=40084, unit="W")
-    ac_frequency = uint16(40085, scale_register=40086, unit="Hz")
-    ac_va = int16(40087, scale_register=40088, unit="VA")
-    ac_var = int16(40089, scale_register=40090, unit="var")
-    ac_power_factor = int16(40091, scale_register=40092, unit="%")
+    ac_power = int16(14, scale_register=15, unit="W")
+    ac_frequency = uint16(16, scale_register=17, unit="Hz")
+    ac_va = int16(18, scale_register=19, unit="VA")
+    ac_var = int16(20, scale_register=21, unit="var")
+    ac_power_factor = int16(22, scale_register=23, unit="%")
     # acc32 on purpose: 0 means "not accumulated". Some firmware transiently
     # reports 0 here around the sleep/wake transition, and a lifetime counter
     # of a producing inverter is never genuinely 0 (unlike a meter's, see
     # _meter_energy), so 0 decodes to None rather than pose as a reading.
-    ac_energy = acc32(40093, scale_register=40095, unit="Wh")
+    ac_energy = acc32(24, scale_register=26, unit="Wh")
 
-    dc_current = uint16(40096, scale_register=40097, unit="A")
-    dc_voltage = uint16(40098, scale_register=40099, unit="V")
-    dc_power = int16(40100, scale_register=40101, unit="W")
+    dc_current = uint16(27, scale_register=28, unit="A")
+    dc_voltage = uint16(29, scale_register=30, unit="V")
+    dc_power = int16(31, scale_register=32, unit="W")
 
-    temperature_cabinet = int16(40102, scale_register=40106, unit="°C")
-    temperature_heatsink = int16(40103, scale_register=40106, unit="°C")
-    temperature_transformer = int16(40104, scale_register=40106, unit="°C")
-    temperature_other = int16(40105, scale_register=40106, unit="°C")
+    temperature_cabinet = int16(33, scale_register=37, unit="°C")
+    temperature_heatsink = int16(34, scale_register=37, unit="°C")
+    temperature_transformer = int16(35, scale_register=37, unit="°C")
+    temperature_other = int16(36, scale_register=37, unit="°C")
 
-    status = enum16(40107, InverterStatus)
-    vendor_status = uint16(40108)
+    status = enum16(38, InverterStatus)
+    vendor_status = uint16(39)
 
     @property
     def on_grid(self) -> bool | None:
@@ -353,7 +350,7 @@ class Inverter(SolarEdgeComponent):
 
 
 class InverterExtended(Inverter):
-    """An inverter that also serves the grid status extension (base 40113).
+    """An inverter that also serves the grid status extension (base 44).
 
     Grid on/off status (word-swapped uint32) and extended vendor status sit
     past the standard model points. Not all firmware serves them: reading them
@@ -364,9 +361,9 @@ class InverterExtended(Inverter):
     """
 
     _grid_status = NumberField(
-        40113, count=2, signed=False, nan=0xFFFF_FFFF, word_order="little"
+        44, count=2, signed=False, nan=0xFFFF_FFFF, word_order="little"
     )
-    vendor_status_extended = uint32(40119)  # type: ignore[assignment]
+    vendor_status_extended = uint32(50)  # type: ignore[assignment]
 
     @property
     def on_grid(self) -> bool | None:
@@ -378,83 +375,72 @@ class InverterExtended(Inverter):
         return None if raw is None else raw == 0
 
 
-class Meter(SolarEdgeComponent):
-    """A SolarEdge meter (SunSpec model 201-204).
+class Meter(SunSpecComponent, SolarEdgeComponent):
+    """A SolarEdge meter's measurements (SunSpec model 201-204).
 
-    One class serves all three meters: instantiate with ``index`` 1, 2 or 3 and
-    every address shifts by ``METER_STRIDE`` per meter. Meter 1's addresses are
-    declared here. When a multiple-MPPT extension shifts the whole meter block
-    up, pass that shift as ``base_offset``; it moves every address, scale
-    registers included.
+    One class serves all three meters and all four model variants: each
+    instance is placed at the address the model chain reports for it.
     """
 
-    # Identity (common block, meter 1 base 40121).
-    manufacturer = _meter_string(40123, 16)
-    model = _meter_string(40139, 16)
-    option = _meter_string(40155, 8)
-    version = _meter_string(40163, 8)
-    serial_number = _meter_string(40171, 16)
+    did = enum16(0, SunSpecDID)
 
-    # Measurements (model block, meter 1 base 40188).
-    did = enum16(40188, SunSpecDID, stride=METER_STRIDE)
+    ac_current = _meter_int16(2, 6)
+    ac_current_a = _meter_int16(3, 6)
+    ac_current_b = _meter_int16(4, 6)
+    ac_current_c = _meter_int16(5, 6)
 
-    ac_current = _meter_int16(40190, 40194)
-    ac_current_a = _meter_int16(40191, 40194)
-    ac_current_b = _meter_int16(40192, 40194)
-    ac_current_c = _meter_int16(40193, 40194)
+    ac_voltage_ln = _meter_int16(7, 15)
+    ac_voltage_an = _meter_int16(8, 15)
+    ac_voltage_bn = _meter_int16(9, 15)
+    ac_voltage_cn = _meter_int16(10, 15)
+    ac_voltage_ll = _meter_int16(11, 15)
+    ac_voltage_ab = _meter_int16(12, 15)
+    ac_voltage_bc = _meter_int16(13, 15)
+    ac_voltage_ca = _meter_int16(14, 15)
 
-    ac_voltage_ln = _meter_int16(40195, 40203)
-    ac_voltage_an = _meter_int16(40196, 40203)
-    ac_voltage_bn = _meter_int16(40197, 40203)
-    ac_voltage_cn = _meter_int16(40198, 40203)
-    ac_voltage_ll = _meter_int16(40199, 40203)
-    ac_voltage_ab = _meter_int16(40200, 40203)
-    ac_voltage_bc = _meter_int16(40201, 40203)
-    ac_voltage_ca = _meter_int16(40202, 40203)
+    ac_frequency = _meter_int16(16, 17)
 
-    ac_frequency = _meter_int16(40204, 40205)
+    ac_power = _meter_int16(18, 22)
+    ac_power_a = _meter_int16(19, 22)
+    ac_power_b = _meter_int16(20, 22)
+    ac_power_c = _meter_int16(21, 22)
 
-    ac_power = _meter_int16(40206, 40210)
-    ac_power_a = _meter_int16(40207, 40210)
-    ac_power_b = _meter_int16(40208, 40210)
-    ac_power_c = _meter_int16(40209, 40210)
+    ac_va = _meter_int16(23, 27)
+    ac_va_a = _meter_int16(24, 27)
+    ac_va_b = _meter_int16(25, 27)
+    ac_va_c = _meter_int16(26, 27)
 
-    ac_va = _meter_int16(40211, 40215)
-    ac_va_a = _meter_int16(40212, 40215)
-    ac_va_b = _meter_int16(40213, 40215)
-    ac_va_c = _meter_int16(40214, 40215)
+    ac_var = _meter_int16(28, 32)
+    ac_var_a = _meter_int16(29, 32)
+    ac_var_b = _meter_int16(30, 32)
+    ac_var_c = _meter_int16(31, 32)
 
-    ac_var = _meter_int16(40216, 40220)
-    ac_var_a = _meter_int16(40217, 40220)
-    ac_var_b = _meter_int16(40218, 40220)
-    ac_var_c = _meter_int16(40219, 40220)
-
-    ac_power_factor = _meter_int16(40221, 40225)
-    ac_power_factor_a = _meter_int16(40222, 40225)
-    ac_power_factor_b = _meter_int16(40223, 40225)
-    ac_power_factor_c = _meter_int16(40224, 40225)
+    ac_power_factor = _meter_int16(33, 37)
+    ac_power_factor_a = _meter_int16(34, 37)
+    ac_power_factor_b = _meter_int16(35, 37)
+    ac_power_factor_c = _meter_int16(36, 37)
 
     # Real energy (Wh).
-    energy_exported = _meter_energy(40226, 40242)
-    energy_exported_a = _meter_energy(40228, 40242)
-    energy_exported_b = _meter_energy(40230, 40242)
-    energy_exported_c = _meter_energy(40232, 40242)
-    energy_imported = _meter_energy(40234, 40242)
-    energy_imported_a = _meter_energy(40236, 40242)
-    energy_imported_b = _meter_energy(40238, 40242)
-    energy_imported_c = _meter_energy(40240, 40242)
+    energy_exported = _meter_energy(38, 54)
+    energy_exported_a = _meter_energy(40, 54)
+    energy_exported_b = _meter_energy(42, 54)
+    energy_exported_c = _meter_energy(44, 54)
+    energy_imported = _meter_energy(46, 54)
+    energy_imported_a = _meter_energy(48, 54)
+    energy_imported_b = _meter_energy(50, 54)
+    energy_imported_c = _meter_energy(52, 54)
 
     # Apparent energy (VAh), totals for exported and imported.
-    apparent_energy_exported = _meter_energy(40243, 40259, "VAh")
-    apparent_energy_imported = _meter_energy(40251, 40259, "VAh")
+    apparent_energy_exported = _meter_energy(55, 71, "VAh")
+    apparent_energy_imported = _meter_energy(63, 71, "VAh")
 
     # Reactive energy (varh) per quadrant: Q1/Q2 import, Q3/Q4 export.
-    reactive_energy_q1 = _meter_energy(40260, 40292, "varh")
-    reactive_energy_q2 = _meter_energy(40268, 40292, "varh")
-    reactive_energy_q3 = _meter_energy(40276, 40292, "varh")
-    reactive_energy_q4 = _meter_energy(40284, 40292, "varh")
+    reactive_energy_q1 = _meter_energy(72, 104, "varh")
+    reactive_energy_q2 = _meter_energy(80, 104, "varh")
+    reactive_energy_q3 = _meter_energy(88, 104, "varh")
+    reactive_energy_q4 = _meter_energy(96, 104, "varh")
 
-    events = bitfield32(40293, MeterEvent, stride=METER_STRIDE)
+    events = bitfield32(105, MeterEvent)
 
 
 class Battery(SolarEdgeComponent):
@@ -759,33 +745,33 @@ class AdvancedPowerControl(SolarEdgeComponent):
 class MpptModule(SolarEdgeComponent):
     """One DC input (string) of a multiple-MPPT inverter.
 
-    Addresses are for module 0 (base 40131); each further module is read at a
+    Addresses are for module 0 (base 10); each further module is read at a
     ``base_offset`` of ``i * 20``. The scale factors live in the shared header
     block, so they are not shifted per module.
     """
 
-    module_id = uint16(40131)
-    label = string(40132, 8)
-    dc_current = uint16(40140, scale_register=40123, unit="A")
-    dc_voltage = uint16(40141, scale_register=40124, unit="V")
-    dc_power = uint16(40142, scale_register=40125, unit="W")
-    dc_energy = uint32(40143, scale_register=40126, unit="Wh")
-    temperature = int16(40147, unit="°C")
-    status = integer(40148, signed=False)
+    module_id = uint16(10)
+    label = string(11, 8)
+    dc_current = uint16(19, scale_register=2, unit="A")
+    dc_voltage = uint16(20, scale_register=3, unit="V")
+    dc_power = uint16(21, scale_register=4, unit="W")
+    dc_energy = uint32(22, scale_register=5, unit="Wh")
+    temperature = int16(26, unit="°C")
+    status = integer(27, signed=False)
 
 
-class Mmppt(SolarEdgeComponent):
-    """Multiple-MPPT extension (SunSpec model 160, base 40121).
+class Mmppt(SunSpecComponent, SolarEdgeComponent):
+    """Multiple-MPPT extension (SunSpec model 160, base 0).
 
     Optional; present on inverters that report per-string DC data. The module
-    count is read from the header at 40129 and sizes the ``modules`` list.
+    count is read from the header at 8 and sizes the ``modules`` list.
     """
 
     # SolarEdge inverters expose at most three DC inputs (strings).
     _MAX_MODULES = 3
 
     modules = repeating_group(
-        integer(40129, signed=False, nan=0xFFFF), MpptModule, stride=20
+        integer(8, signed=False, nan=0xFFFF), MpptModule, stride=20
     )
 
     async def async_update_repeating_groups(self) -> None:
@@ -800,3 +786,26 @@ class Mmppt(SolarEdgeComponent):
             self._counts["modules"] = self._MAX_MODULES
 
         await super().async_update_repeating_groups()
+
+
+class MeterDevice:  # pylint: disable=too-few-public-methods
+    """A meter: a SunSpec common block plus one of models 201-204.
+
+    SolarEdge publishes a meter as two chained models, so its identity and its
+    measurements are separate components placed at their own addresses.
+    """
+
+    def __init__(
+        self,
+        unit: ModbusUnit,
+        common_model: SunSpecModel,
+        meter_model: SunSpecModel,
+    ) -> None:
+        """Place the meter's two blocks at the addresses the chain reported."""
+        self.common = Common(unit, common_model)
+        self.meter = Meter(unit, meter_model)
+
+    @property
+    def components(self) -> list[Component]:
+        """The two components this meter contributes to the poll."""
+        return [self.common, self.meter]

@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 import pytest
 from modbus_connection.mock import MockModbusConnection
 
-from .conftest import load_registers
+from .conftest import add_chain, load_registers
 
 if TYPE_CHECKING:
     from types import ModuleType
@@ -41,7 +41,9 @@ async def test_example_runs(
 ) -> None:
     """Each example probes, acts on, and reports a seeded device without error."""
     connection = MockModbusConnection()
-    connection.for_unit(1).holding.update(load_registers("se17k_3phase.json"))
+    unit = connection.for_unit(1)
+    unit.holding.update(load_registers("se17k_3phase.json"))
+    add_chain(unit)
 
     async def _connect(_host: str, *, port: int = 1502) -> MockModbusConnection:
         assert port

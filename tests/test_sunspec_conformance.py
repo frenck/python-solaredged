@@ -142,9 +142,9 @@ def _assert_conforms(
 
 def test_common_block_matches_sunspec_model_1() -> None:
     """The inverter identity block conforms to the SunSpec common model."""
-    # The "SunS" marker occupies 40000-40001, so the common model starts at 40002.
-    _assert_conforms(Common, _spec_index("model_1.json", 40002))
-    _assert_conforms(Common, _generated_index("model_1.json", 40002))
+    # Addresses are model-relative now, the same coordinates the spec uses.
+    _assert_conforms(Common, _spec_index("model_1.json", 0))
+    _assert_conforms(Common, _generated_index("model_1.json", 0))
 
 
 def test_inverter_block_matches_sunspec_model_103() -> None:
@@ -156,19 +156,11 @@ def test_inverter_block_matches_sunspec_model_103() -> None:
     """
     skip = frozenset({"_grid_status", "vendor_status_extended"})
 
-    _assert_conforms(InverterExtended, _spec_index("model_103.json", 40069), skip=skip)
-    _assert_conforms(
-        InverterExtended, _generated_index("model_103.json", 40069), skip=skip
-    )
+    _assert_conforms(InverterExtended, _spec_index("model_103.json", 0), skip=skip)
+    _assert_conforms(InverterExtended, _generated_index("model_103.json", 0), skip=skip)
 
 
 def test_meter_block_matches_sunspec() -> None:
-    """The meter identity and measurement blocks conform to SunSpec models 1 + 203."""
-    _assert_conforms(
-        Meter, _spec_index("model_1.json", 40121) | _spec_index("model_203.json", 40188)
-    )
-    _assert_conforms(
-        Meter,
-        _generated_index("model_1.json", 40121)
-        | _generated_index("model_203.json", 40188),
-    )
+    """The meter measurement block conforms to SunSpec model 203."""
+    _assert_conforms(Meter, _spec_index("model_203.json", 0))
+    _assert_conforms(Meter, _generated_index("model_203.json", 0))

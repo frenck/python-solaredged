@@ -6,9 +6,11 @@ import math
 from typing import TYPE_CHECKING
 
 from modbus_connection import ModbusError, ModbusExceptionError
-from modbus_connection.decode import combine_words, decode_float32
+from modbus_connection.decode import decode_float32
 from modbus_connection.model import ComponentGroup
+from modbus_connection.model.sunspec import SunSpecError, SunSpecModel, scan
 
+from . import chain
 from .components import (
     AdvancedPowerControl,
     Battery,
@@ -16,7 +18,7 @@ from .components import (
     ExportControl,
     Inverter,
     InverterExtended,
-    Meter,
+    MeterDevice,
     Mmppt,
     PowerControl,
     StorageControl,
@@ -25,18 +27,18 @@ from .const import (
     ADVANCED_POWER_CONTROL_BASE,
     BATTERY_BASE_OFFSETS,
     BATTERY_COMMON_BASE,
+    COMMON_MODEL_ID,
     EV_CHARGER_MODEL_PREFIX,
     EXPORT_CONTROL_BASE,
     GRID_STATUS_BASE,
     INVERTER_COMMON_BASE,
-    METER_COUNT,
-    METER_MODEL_BASE,
-    METER_STRIDE,
-    MMPPT_BASE,
-    MMPPT_UNITS_OFFSET,
+    INVERTER_MODEL_IDS,
+    METER_DIDS,
+    METER_MODEL_OFFSET,
+    METER_SLOT_BASES,
+    MMPPT_MODEL_ID,
     POWER_CONTROL_BASE,
     STORAGE_CONTROL_BASE,
-    SUNSPEC_ID,
     SunSpecDID,
 )
 from .exceptions import SolarEdgeConnectionError, SolarEdgeError
@@ -71,22 +73,16 @@ class SolarEdge:
     def __init__(  # noqa: PLR0913  # pylint: disable=too-many-arguments
         self,
         unit: ModbusUnit,
+        models: dict[int, list[SunSpecModel]],
         *,
-        meters: int = 0,
-        meter_shift: int = 0,
         batteries: int = 0,
-        mmppt: bool = False,
         grid_status: bool = False,
         storage_control: bool = False,
         export_control: bool = False,
         power_control: bool = False,
         advanced_power_control: bool = False,
     ) -> None:
-        """Set up the components for the detected device layout."""
-        if not 0 <= meters <= METER_COUNT:
-            msg = f"meters must be between 0 and {METER_COUNT}, got {meters}"
-            raise SolarEdgeError(msg)
-
+        """Set up the components for the discovered model chain."""
         if not 0 <= batteries <= len(BATTERY_BASE_OFFSETS):
             msg = (
                 f"batteries must be between 0 and {len(BATTERY_BASE_OFFSETS)}, "
@@ -94,25 +90,43 @@ class SolarEdge:
             )
             raise SolarEdgeError(msg)
 
+        common_model = chain.first(models, COMMON_MODEL_ID)
+        inverter_model = chain.first(models, *INVERTER_MODEL_IDS)
+        if common_model is None or inverter_model is None:
+            msg = "Device is not a SolarEdge inverter (no inverter model in the chain)"
+            raise SolarEdgeError(msg)
+
         self._unit = unit
 
-        # Always present: the inverter identity and measurements. The grid
-        # status extension is firmware-dependent; reading it on an inverter
-        # that lacks it would fail the whole pooled inverter read, so the
-        # extended component is only used where the extension is present.
-        self.common = Common(unit)
-        self.inverter = InverterExtended(unit) if grid_status else Inverter(unit)
-        self.mmppt = Mmppt(unit) if mmppt else None
+        # SolarEdge's grid status extension reuses registers inside the standard
+        # inverter model rather than lengthening it, so the chain cannot report
+        # it and the block is probed like the other proprietary ones.
+        self.common = Common(unit, common_model)
+        inverter_class = InverterExtended if grid_status else Inverter
+        self.inverter: Inverter = inverter_class(unit, inverter_model)
 
-        # Attached sub-devices, addressed per unit by index / base offset.
-        self.meters: list[Meter] = [
-            Meter(unit, index=i + 1, base_offset=meter_shift) for i in range(meters)
-        ]
+        mppt_model = chain.first(models, MMPPT_MODEL_ID)
+        self.mmppt = Mmppt(unit, mppt_model) if mppt_model is not None else None
+
+        # SolarEdge keeps meter n at a fixed slot, shifted along by the whole
+        # multiple-MPPT model when the inverter publishes one. The chain reports
+        # that model's real span, so the shift comes from the device.
+        shift = chain.span(mppt_model) if mppt_model is not None else 0
+        self.meters: list[MeterDevice] = []
+        for base in METER_SLOT_BASES:
+            meter_common = chain.at(models, base + shift)
+            meter_model = chain.at(models, base + shift + METER_MODEL_OFFSET)
+            if meter_common is None or meter_common.model_id != COMMON_MODEL_ID:
+                continue
+            if meter_model is None or meter_model.model_id not in METER_DIDS:
+                continue
+            self.meters.append(MeterDevice(unit, meter_common, meter_model))
+
         self.batteries: list[Battery] = [
             Battery(unit, base_offset=BATTERY_BASE_OFFSETS[i]) for i in range(batteries)
         ]
 
-        # Optional writable control blocks.
+        # Optional writable control blocks, outside the SunSpec chain.
         self.storage_control = StorageControl(unit) if storage_control else None
         self.export_control = ExportControl(unit) if export_control else None
         self.power_control = PowerControl(unit) if power_control else None
@@ -129,7 +143,8 @@ class SolarEdge:
         if self.mmppt is not None:
             parts.append(self.mmppt)
 
-        parts.extend(self.meters)
+        for meter in self.meters:
+            parts.extend(meter.components)
         parts.extend(self.batteries)
         parts.extend(
             control
@@ -166,47 +181,31 @@ class SolarEdge:
             await self._group.async_update()
         except ModbusError as err:
             raise SolarEdgeConnectionError(str(err)) from err
-
-        # The inverter model id is always populated on a real device. A device
-        # that answers the poll but reports a bogus identity (a zero or unknown
-        # model id decoding to None) would otherwise present as a silently-blank
-        # inverter, so surface that as a read failure. A genuine partial block
-        # read raises upstream and is already wrapped above.
-        if self.inverter.did is None:
-            msg = "Device returned no valid inverter data"
-            raise SolarEdgeConnectionError(msg)
+        except SunSpecError as err:
+            # A block whose header no longer matches the discovered model: the
+            # map moved under us, so the values read are not what they claim.
+            raise SolarEdgeError(str(err)) from err
 
     @classmethod
     async def async_probe(cls, unit: ModbusUnit) -> SolarEdge:
-        """Detect the device layout on ``unit`` and return a ready instance.
+        """Discover the device on ``unit`` and return a ready instance.
 
-        Validates the SunSpec header, counts the meters, and probes for the
-        grid status extension and the battery and control blocks. Absent
-        optional blocks (which answer with a Modbus exception) are treated as
-        not present; a genuine transport failure raises
-        :class:`SolarEdgeConnectionError`.
+        Walks the SunSpec model chain for the inverter, its identity, the
+        multiple-MPPT extension and the meters, then probes the SolarEdge
+        proprietary blocks, which are not part of the chain.
         """
         try:
-            header = await unit.read_holding_registers(INVERTER_COMMON_BASE, 4)
+            models = await scan(unit, INVERTER_COMMON_BASE)
+        except SunSpecError as err:
+            raise SolarEdgeError(str(err)) from err
+        except ModbusError as err:
+            raise SolarEdgeConnectionError(str(err)) from err
 
-            if combine_words(header[0:2]) != SUNSPEC_ID:
-                msg = "Device is not a SolarEdge inverter (no SunSpec identifier)"
-                raise SolarEdgeError(msg)
-
-            # A multiple-MPPT extension shifts the meter blocks up by its on-wire
-            # size (10 + modules * 20 registers), so detect it before the meters.
-            mmppt_units = await cls._mmppt_units(unit)
-            meter_shift = 10 + mmppt_units * 20 if mmppt_units else 0
-
-            meters = await cls._count_meters(unit, meter_shift)
-            batteries = await cls._count_batteries(unit)
-
+        try:
             return cls(
                 unit,
-                meters=meters,
-                meter_shift=meter_shift,
-                batteries=batteries,
-                mmppt=mmppt_units > 0,
+                models,
+                batteries=await cls._count_batteries(unit),
                 grid_status=await cls._block_present(unit, GRID_STATUS_BASE),
                 storage_control=await cls._block_present(unit, STORAGE_CONTROL_BASE),
                 export_control=await cls._block_present(unit, EXPORT_CONTROL_BASE),
@@ -217,42 +216,6 @@ class SolarEdge:
             )
         except ModbusError as err:
             raise SolarEdgeConnectionError(str(err)) from err
-
-    @staticmethod
-    async def _mmppt_units(unit: ModbusUnit) -> int:
-        """Return the multiple-MPPT module count (2 or 3), or 0 when absent."""
-        try:
-            header = await unit.read_holding_registers(
-                MMPPT_BASE, MMPPT_UNITS_OFFSET + 1
-            )
-        except ModbusExceptionError:
-            return 0
-
-        modules = header[MMPPT_UNITS_OFFSET]
-        if header[0] == SunSpecDID.MULTIPLE_MPPT and modules in (2, 3):
-            return modules
-
-        return 0
-
-    @staticmethod
-    async def _count_meters(unit: ModbusUnit, meter_shift: int = 0) -> int:
-        """Count meters by reading each meter's model identifier register."""
-        count = 0
-        base = METER_MODEL_BASE + meter_shift
-
-        for index in range(METER_COUNT):
-            address = base + METER_STRIDE * index
-            try:
-                did = (await unit.read_holding_registers(address, 1))[0]
-            except ModbusExceptionError:
-                break
-
-            if did not in _METER_DIDS:
-                break
-
-            count += 1
-
-        return count
 
     @staticmethod
     async def _count_batteries(unit: ModbusUnit) -> int:

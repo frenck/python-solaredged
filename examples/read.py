@@ -30,7 +30,7 @@ async def main() -> None:
         print(f"  lifetime:  {inverter.ac_energy} Wh")
 
         for index, meter in enumerate(solaredge.meters, 1):
-            print(f"  meter {index}: {meter.ac_power} W")
+            print(f"  meter {index}: {meter.meter.ac_power} W")
         for index, battery in enumerate(solaredge.batteries, 1):
             print(f"  battery {index}: {battery.state_of_energy}% charged")
     finally:

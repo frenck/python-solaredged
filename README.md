@@ -112,9 +112,12 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-`async_probe` validates the SunSpec header and detects which meters, batteries
-and control blocks are present, plus whether the firmware serves the grid
-status extension (not all firmware does). `async_update` refreshes every
+`async_probe` walks the SunSpec model chain, which reports where the inverter,
+its identity, the multiple-MPPT extension and each meter actually sit, then
+probes the SolarEdge proprietary blocks the chain cannot describe: the
+batteries, the control blocks, and the grid status extension (not all firmware
+serves it). A meter is two chained models, so its identity is on
+`meter.common` and its measurements on `meter.meter`. `async_update` refreshes every
 component in as few Modbus reads as possible. Values decode to `None` when the
 device reports a point as not implemented, including a lifetime energy of 0
 (SunSpec's "not accumulated", transiently reported by some firmware around

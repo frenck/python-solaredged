@@ -312,7 +312,8 @@ def _render_strings(client: SolarEdge) -> None:
 
 def _render_meters(client: SolarEdge) -> None:
     """Render a panel per meter."""
-    for index, meter in enumerate(client.meters, 1):
+    for index, device in enumerate(client.meters, 1):
+        meter = device.meter
         table = _field_table()
         table.add_row("⚡ Power", _fmt(meter.ac_power, "W"))
         table.add_row("\U0001f504 Frequency", _fmt(meter.ac_frequency, "Hz"))
@@ -412,7 +413,10 @@ async def info_command(
                 "mmppt": [_decoded(module) for module in client.mmppt.modules]
                 if client.mmppt
                 else [],
-                "meters": [_decoded(meter) for meter in client.meters],
+                "meters": [
+                    {"common": _decoded(m.common), "meter": _decoded(m.meter)}
+                    for m in client.meters
+                ],
                 "batteries": [_decoded(battery) for battery in client.batteries],
                 "storage_control": _decoded(client.storage_control)
                 if client.storage_control

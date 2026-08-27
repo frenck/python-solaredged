@@ -143,7 +143,12 @@ def test_dump() -> None:
 def test_info_renders_meter(patch_connect: Callable[[], MockModbusConnection]) -> None:
     """The info output includes a meter panel when a meter is present."""
     conn = patch_connect()
-    conn.for_unit(1).holding[40188] = int(SunSpecDID.THREE_PHASE_WYE_METER)
+    holding = conn.for_unit(1).holding
+    holding[40121] = 1  # the meter's common block
+    holding[40122] = 65
+    holding[40188] = int(SunSpecDID.THREE_PHASE_WYE_METER)
+    holding[40189] = 105
+    holding[40295] = 0xFFFF  # the chain ends after the meter
     result = runner.invoke(cli, ["info", "--host", "inverter.local"])
     assert result.exit_code == 0
     assert "Meter 1" in result.output
@@ -157,7 +162,9 @@ def test_info_renders_battery_and_strings(
     for i, word in enumerate(encode_float32(10000.0, word_order="little")):
         holding[57666 + i] = word  # battery rated energy -> battery detected
     holding[40121] = 160  # MMPPT DID
+    holding[40122] = 48  # eight header points plus two 20-register modules
     holding[40129] = 2  # two DC modules
+    holding[40171] = 0xFFFF  # the chain ends after the extension
     result = runner.invoke(cli, ["info", "--host", "inverter.local"])
     assert result.exit_code == 0
     assert "Battery 1" in result.output
@@ -443,9 +450,10 @@ def test_info_stripped_device_has_no_controls(
     se17k_connection: MockModbusConnection, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """An inverter with no control blocks renders without a Controls panel."""
+    # 40121 stays readable: it carries the chain's end marker on this device.
     conn = _PrunedConnection(
         inner=se17k_connection,
-        absent={40121, 40188, 57666, 57348, 57344, 61440, 61696},
+        absent={57666, 57348, 57344, 61440, 61696},
     )
     monkeypatch.setattr("solaredged.cli.connect_tcp", _connect_returning(conn))
     result = runner.invoke(cli, ["info", "--host", "inverter.local"])
