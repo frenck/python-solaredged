@@ -59,7 +59,7 @@ Changelog = "https://github.com/frenck/python-solaredged/releases"
 codespell = "2.4.3"
 covdefaults = "2.3.0"
 coverage = { version = "7.15.4", extras = ["toml"] }
-hypothesis = "6.156.6"
+hypothesis = "6.165.10"
 ty = "0.0.75"
 pre-commit-hooks = "6.0.0"
 prek = "0.5.0"
