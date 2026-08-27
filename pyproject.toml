@@ -121,6 +121,8 @@ ignore = [
   "D213",    # Conflicts with other rules
   "D417",    # False positives in some occasions
   "PLR2004", # Just annoying, not really useful
+  "PLR0917", # Existing API signatures and calls intentionally use many args
+  "CPY001",  # Project does not enforce file-level copyright headers
 
   # Conflicts with the Ruff formatter
   "COM812",
