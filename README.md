@@ -99,7 +99,7 @@ async def main() -> None:
     try:
         unit = connection.for_unit(1)
         solaredge = await SolarEdge.async_probe(unit)  # detects the layout
-        report = await solaredge.async_update()        # one read per sub-system
+        report = await solaredge.async_update()  # one read per sub-system
 
         print(solaredge.inverter.ac_power, "W")
         print(solaredge.inverter.status)

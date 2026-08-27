@@ -67,7 +67,7 @@ pylint = "4.0.7"
 pytest = "9.1.1"
 pytest-asyncio = "1.4.0"
 pytest-cov = "7.1.0"
-ruff = "0.15.22"
+ruff = "0.16.4"
 syrupy = "6.0.0"
 typer = "0.26.8"
 yamllint = "1.38.0"
@@ -121,6 +121,8 @@ ignore = [
   "D213",    # Conflicts with other rules
   "D417",    # False positives in some occasions
   "PLR2004", # Just annoying, not really useful
+  "PLR0917", # Existing API signatures and calls intentionally use many args
+  "CPY001",  # Project does not enforce file-level copyright headers
 
   # Conflicts with the Ruff formatter
   "COM812",
