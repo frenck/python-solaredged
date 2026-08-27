@@ -3,9 +3,16 @@
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from modbus_connection import ModbusError, ModbusExceptionError
+from modbus_connection import (
+    IllegalDataAddressError,
+    IllegalFunctionError,
+    ModbusConnectionError,
+    ModbusError,
+    ModbusTimeoutError,
+)
 from modbus_connection.decode import combine_words, decode_float32
 from modbus_connection.model import ComponentGroup
 
@@ -42,8 +49,12 @@ from .const import (
 from .exceptions import SolarEdgeConnectionError, SolarEdgeError
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from modbus_connection import ModbusUnit
     from modbus_connection.model import Component
+
+    _Pollable = Component | ComponentGroup
 
 _METER_DIDS = frozenset(
     {
@@ -53,6 +64,35 @@ _METER_DIDS = frozenset(
         SunSpecDID.THREE_PHASE_DELTA_METER,
     }
 )
+
+# Sub-systems polled on their own, named by the attribute holding each. A name
+# holding None is absent on this device; one holding a list is polled per item,
+# so a single failing meter cannot blank the others.
+_READINGS = ("common", "inverter", "mmppt", "meters", "batteries")
+_SETTINGS = ("_site_control", "power_control", "advanced_power_control")
+
+# The names above holding a list of sub-systems rather than one.
+_LISTS = frozenset({"meters", "batteries"})
+
+
+@dataclass(frozen=True)
+class UpdateReport:
+    """What one poll refreshed, named by sub-system.
+
+    A sub-system in ``failed`` kept the values it had: a read plan decodes
+    nothing until every one of its blocks came back. The exception is a
+    repeating group that grew, where the rows read before the failure are
+    already decoded. A dead link never appears here, and neither does a poll
+    that refreshed nothing: both raise rather than report total silence.
+    """
+
+    updated: set[str]
+    failed: dict[str, SolarEdgeError]
+
+    @property
+    def complete(self) -> bool:
+        """Whether every sub-system refreshed."""
+        return not self.failed
 
 
 class SolarEdge:
@@ -120,7 +160,22 @@ class SolarEdge:
             AdvancedPowerControl(unit) if advanced_power_control else None
         )
 
-        self._group = ComponentGroup(unit, self.components)
+        # Export control's read already spans the storage control block, so
+        # the two are read together for the price of one. Blocks that merely
+        # sit back to back are left apart, which buys failure isolation for
+        # nothing.
+        overlapping = [
+            control
+            for control in (self.storage_control, self.export_control)
+            if control is not None
+        ]
+        self._site_control: _Pollable | None
+        if len(overlapping) > 1:
+            self._site_control = ComponentGroup(unit, overlapping)
+        elif overlapping:
+            self._site_control = overlapping[0]
+        else:
+            self._site_control = None
 
     @property
     def components(self) -> list[Component]:
@@ -160,21 +215,81 @@ class SolarEdge:
             return None
         return model.startswith(EV_CHARGER_MODEL_PREFIX)
 
-    async def async_update(self) -> None:
-        """Refresh every component in one pooled set of Modbus reads."""
-        try:
-            await self._group.async_update()
-        except ModbusError as err:
-            raise SolarEdgeConnectionError(str(err)) from err
+    async def async_update_readings(self) -> UpdateReport:
+        """Refresh what the device measures: the inverter, meters and batteries."""
+        return await self._async_poll(_READINGS)
 
-        # The inverter model id is always populated on a real device. A device
-        # that answers the poll but reports a bogus identity (a zero or unknown
-        # model id decoding to None) would otherwise present as a silently-blank
-        # inverter, so surface that as a read failure. A genuine partial block
-        # read raises upstream and is already wrapped above.
-        if self.inverter.did is None:
+    async def async_update_settings(self) -> UpdateReport:
+        """Refresh the control blocks, which move only when something writes them."""
+        return await self._async_poll(_SETTINGS)
+
+    async def async_update(self) -> UpdateReport:
+        """Refresh readings and settings together, in one report."""
+        return await self._async_poll((*_READINGS, *_SETTINGS))
+
+    async def _async_poll(self, names: tuple[str, ...]) -> UpdateReport:
+        """Read each sub-system on its own, collecting what happened."""
+        updated: set[str] = set()
+        failed: dict[str, SolarEdgeError] = {}
+
+        for name, target in self._targets(names):
+            try:
+                await target.async_update()
+            except ModbusConnectionError as err:
+                raise SolarEdgeConnectionError(str(err)) from err
+            except ModbusTimeoutError as err:
+                # Nothing has answered, so the rest would only pay a timeout each.
+                if not updated and not failed:
+                    raise SolarEdgeConnectionError(str(err)) from err
+                failed[name] = SolarEdgeConnectionError(str(err))
+            except ModbusError as err:
+                failed[name] = SolarEdgeConnectionError(str(err))
+            else:
+                updated.add(name)
+
+        # A poll that refreshed nothing is a failed poll, not a report of one.
+        # Every value the caller can read is stale, so say so the way a dead
+        # link does. An empty `failed` means this device simply has none of the
+        # sub-systems asked for, which is not a failure.
+        if failed and not updated:
+            raise SolarEdgeConnectionError(
+                "No sub-system answered: " + "; ".join(map(str, failed.values()))
+            )
+
+        # A device that answers the poll but reports a bogus identity (a zero
+        # or unknown model id decoding to None) would otherwise present as a
+        # silently-blank inverter. Checked here so the split entry points get
+        # it too, not only a whole-device poll.
+        if "inverter" in updated and self.inverter.did is None:
             msg = "Device returned no valid inverter data"
             raise SolarEdgeConnectionError(msg)
+
+        return UpdateReport(updated=updated, failed=failed)
+
+    def _targets(self, names: tuple[str, ...]) -> Iterator[tuple[str, _Pollable]]:
+        """Yield the named sub-systems, skipping the ones this device lacks."""
+        for name in names:
+            # An internal poll target still reports under a clean name.
+            key = name.lstrip("_")
+            if name in _LISTS:
+                parts: list[_Pollable] = getattr(self, name)
+                yield from ((f"{key}[{i}]", part) for i, part in enumerate(parts))
+                continue
+            target: _Pollable | None = getattr(self, name)
+            if target is not None:
+                yield key, target
+
+    async def async_read_raw(self) -> dict[str, dict[int, int | bool]]:
+        """Every register this device reads, undecoded, for diagnostics."""
+        raw: dict[str, dict[int, int | bool]] = {}
+        for _name, target in self._targets((*_READINGS, *_SETTINGS)):
+            try:
+                read = await target.async_read_raw(notify=False)
+            except ModbusError as err:
+                raise SolarEdgeConnectionError(str(err)) from err
+            for space, values in read.items():
+                raw.setdefault(space, {}).update(values)
+        return raw
 
     @classmethod
     async def async_probe(cls, unit: ModbusUnit) -> SolarEdge:
@@ -225,7 +340,7 @@ class SolarEdge:
             header = await unit.read_holding_registers(
                 MMPPT_BASE, MMPPT_UNITS_OFFSET + 1
             )
-        except ModbusExceptionError:
+        except (IllegalDataAddressError, IllegalFunctionError):
             return 0
 
         modules = header[MMPPT_UNITS_OFFSET]
@@ -244,7 +359,7 @@ class SolarEdge:
             address = base + METER_STRIDE * index
             try:
                 did = (await unit.read_holding_registers(address, 1))[0]
-            except ModbusExceptionError:
+            except (IllegalDataAddressError, IllegalFunctionError):
                 break
 
             if did not in _METER_DIDS:
@@ -266,7 +381,7 @@ class SolarEdge:
             address = rated_energy_base + offset
             try:
                 words = await unit.read_holding_registers(address, 2)
-            except ModbusExceptionError:
+            except (IllegalDataAddressError, IllegalFunctionError):
                 break
 
             rated = decode_float32(words, word_order="little")
@@ -287,6 +402,6 @@ class SolarEdge:
         """
         try:
             await unit.read_holding_registers(address, 1)
-        except ModbusExceptionError:
+        except (IllegalDataAddressError, IllegalFunctionError):
             return False
         return True

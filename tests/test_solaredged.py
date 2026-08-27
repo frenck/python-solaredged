@@ -8,9 +8,11 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 from modbus_connection import (
+    IllegalDataAddressError,
     ModbusConnectionError,
     ModbusExceptionError,
     ModbusTimeoutError,
+    ServerDeviceFailureError,
 )
 from modbus_connection.decode import decode_float32
 from modbus_connection.encode import encode_float32, encode_int
@@ -36,7 +38,7 @@ from .conftest import seed
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from modbus_connection.mock import MockModbusConnection, MockModbusUnit
+    from modbus_connection.mock import MockModbusUnit
 
     from solaredged.components import Component
 
@@ -154,7 +156,7 @@ class _PickyUnit:
     ) -> None:
         self._inner = inner
         self._fail_at = fail_at
-        self._error = error or ModbusExceptionError(2)
+        self._error = error or IllegalDataAddressError()
 
     async def read_holding_registers(self, address: int, count: int) -> list[int]:
         if address in self._fail_at:
@@ -497,10 +499,21 @@ async def test_grid_status(mock_modbus_unit: MockModbusUnit) -> None:
     assert client.inverter.on_grid is False
 
 
+async def test_device_fault_while_probing_is_not_an_absent_block(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """A device fault during the probe surfaces, rather than reading as absent."""
+    seed(mock_modbus_unit, FIXTURE)
+    mock_modbus_unit.fail_read(40113, ServerDeviceFailureError())
+
+    with pytest.raises(SolarEdgeConnectionError):
+        await SolarEdge.async_probe(mock_modbus_unit)
+
+
 async def test_grid_status_extension_absent(mock_modbus_unit: MockModbusUnit) -> None:
     """Firmware without the grid status extension still probes and polls."""
     seed(mock_modbus_unit, FIXTURE)
-    mock_modbus_unit.fail_read(40113, ModbusExceptionError(2, "illegal data address"))
+    mock_modbus_unit.fail_read(40113, IllegalDataAddressError())
 
     client = await SolarEdge.async_probe(mock_modbus_unit)
     assert not isinstance(client.inverter, InverterExtended)
@@ -708,13 +721,13 @@ async def test_export_mode_unimplemented_is_none(
 
 
 async def test_direct_write_registers_wraps_connection_error(
-    mock_modbus_connection: MockModbusConnection, mock_modbus_unit: MockModbusUnit
+    mock_modbus_unit: MockModbusUnit,
 ) -> None:
     """A failed multi-register control write (set_enabled) wraps the backend error."""
     seed(mock_modbus_unit, FIXTURE)
     client = await SolarEdge.async_probe(mock_modbus_unit)
     assert client.advanced_power_control is not None
-    mock_modbus_connection.simulate_connection_lost()
+    mock_modbus_unit.fail_requests(ModbusConnectionError())
 
     with pytest.raises(SolarEdgeConnectionError):
         await client.advanced_power_control.set_enabled(enabled=True)
@@ -1061,68 +1074,224 @@ async def test_update_blank_inverter_block_raises(
         await client.async_update()
 
 
-async def test_update_partial_block_read_raises(
+async def test_blank_inverter_identity_is_caught_by_the_split_poll_too(
     mock_modbus_unit: MockModbusUnit,
 ) -> None:
-    """A block refused mid-poll surfaces as a connection error, not silent None.
+    """The identity guard covers async_update_readings, not only a whole poll."""
+    seed(mock_modbus_unit, FIXTURE)
+    client = await SolarEdge.async_probe(mock_modbus_unit)
+    mock_modbus_unit.holding[40069] = 0  # inverter DID -> not a member -> None
 
-    modbus-connection raises on a partial block read rather than blanking the
-    values that did not come back (a ``BlockReadError``, itself a ``ModbusError``).
-    Here the always-present inverter block is refused after a clean probe, and
-    ``async_update`` wraps that as a connection error instead of handing back a
-    half-empty device.
-    """
+    with pytest.raises(SolarEdgeConnectionError, match="no valid inverter data"):
+        await client.async_update_readings()
+
+
+async def test_a_poll_that_refreshed_nothing_raises(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """Every sub-system refused means every value is stale, so the poll raises."""
+    seed(mock_modbus_unit, FIXTURE)
+    client = await SolarEdge.async_probe(mock_modbus_unit)
+    await client.async_update()
+
+    mock_modbus_unit.fail_requests(IllegalDataAddressError())
+
+    with pytest.raises(SolarEdgeConnectionError, match="No sub-system answered"):
+        await client.async_update()
+
+
+async def test_a_device_without_the_asked_for_blocks_reports_empty(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """No control blocks at all is an empty report, not a failed poll."""
+    seed(mock_modbus_unit, FIXTURE)
+    client = SolarEdge(mock_modbus_unit)  # the layout without any control block
+
+    report = await client.async_update_settings()
+
+    assert report.complete
+    assert not report.updated
+
+
+async def test_read_raw_covers_the_detected_layout(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """The dump follows the probed layout, and reports a refusal as an error."""
     seed(mock_modbus_unit, FIXTURE)
     client = await SolarEdge.async_probe(mock_modbus_unit)
 
-    # Refuse any pooled read that spans the inverter model block.
-    mock_modbus_unit.fail_read(40069, ModbusExceptionError(4))
+    raw = await client.async_read_raw()
+
+    assert set(raw) == {"holding"}
+    # The inverter identity and a control block both land in the same dump.
+    assert 40004 in raw["holding"]
+    assert 57348 in raw["holding"]
+
+    mock_modbus_unit.fail_read(40004, IllegalDataAddressError())
+    with pytest.raises(SolarEdgeConnectionError):
+        await client.async_read_raw()
+
+
+async def test_readings_and_settings_poll_their_own_blocks(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """Neither update method reads a block the other one owns."""
+    seed(mock_modbus_unit, FIXTURE)
+    client = await SolarEdge.async_probe(mock_modbus_unit)
+    await client.async_update()
+
+    mock_modbus_unit.read_events.clear()
+    readings = await client.async_update_readings()
+    reading_blocks = {
+        (e.register_type, e.address) for e in mock_modbus_unit.read_events
+    }
+
+    mock_modbus_unit.read_events.clear()
+    settings = await client.async_update_settings()
+    setting_blocks = {
+        (e.register_type, e.address) for e in mock_modbus_unit.read_events
+    }
+
+    assert "inverter" in readings.updated
+    assert "site_control" in settings.updated
+    assert not reading_blocks & setting_blocks
+
+    # Together they are exactly what a full poll reads.
+    mock_modbus_unit.read_events.clear()
+    await client.async_update()
+    whole = {(e.register_type, e.address) for e in mock_modbus_unit.read_events}
+    assert whole == reading_blocks | setting_blocks
+
+
+async def test_a_slow_sub_system_is_reported_once_something_answered(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """A timeout after a good read fails one sub-system, not the whole poll."""
+    seed(mock_modbus_unit, FIXTURE)
+    client = await SolarEdge.async_probe(mock_modbus_unit)
+    await client.async_update()
+
+    # The identity block is read first, so something has answered by the time
+    # the inverter block times out.
+    mock_modbus_unit.fail_read(40069, ModbusTimeoutError("slow inverter block"))
+    report = await client.async_update()
+
+    assert set(report.failed) == {"inverter"}
+    assert "common" in report.updated
+
+
+async def test_a_silent_device_raises_on_the_first_sub_system(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """Nothing answered, so the rest would only pay a timeout each."""
+    seed(mock_modbus_unit, FIXTURE)
+    client = await SolarEdge.async_probe(mock_modbus_unit)
+    mock_modbus_unit.fail_requests(ModbusTimeoutError("device asleep"))
 
     with pytest.raises(SolarEdgeConnectionError):
         await client.async_update()
 
 
+async def test_one_meter_failing_leaves_the_others_fresh(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """Each meter is its own failure domain, so one refusal spares the rest."""
+    seed(mock_modbus_unit, "community/issue827_u1.json")
+    client = await SolarEdge.async_probe(mock_modbus_unit)
+    await client.async_update()
+    assert len(client.meters) > 1
+
+    mock_modbus_unit.fail_read(40123, IllegalDataAddressError())
+    report = await client.async_update()
+
+    assert set(report.failed) == {"meters[0]"}
+    assert "meters[1]" in report.updated
+    assert client.meters[1].ac_power is not None
+
+
+async def test_the_overlapping_control_blocks_share_one_read(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """Export control's read spans storage control, so the two read together."""
+    seed(mock_modbus_unit, FIXTURE)
+    client = await SolarEdge.async_probe(mock_modbus_unit)
+    assert client.storage_control is not None
+    assert client.export_control is not None
+
+    await client.async_update()
+    mock_modbus_unit.read_events.clear()
+    report = await client.async_update()
+
+    assert "site_control" in report.updated
+    control_reads = [
+        event
+        for event in mock_modbus_unit.read_events
+        if 57344 <= event.address <= 57363
+    ]
+    assert len(control_reads) == 1
+
+
+async def test_a_refused_block_is_reported_not_raised(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """A block refused mid-poll fails its own sub-system and leaves the rest."""
+    seed(mock_modbus_unit, FIXTURE)
+    client = await SolarEdge.async_probe(mock_modbus_unit)
+    await client.async_update()
+
+    mock_modbus_unit.fail_read(40069, ModbusExceptionError(4))
+    report = await client.async_update()
+
+    assert not report.complete
+    assert set(report.failed) == {"inverter"}
+    assert isinstance(report.failed["inverter"], SolarEdgeConnectionError)
+
+    # The identity block sits in its own read, so it still refreshed.
+    assert "common" in report.updated
+    assert client.common.manufacturer is not None
+
+
 async def test_update_wraps_connection_error(
-    mock_modbus_connection: MockModbusConnection, mock_modbus_unit: MockModbusUnit
+    mock_modbus_unit: MockModbusUnit,
 ) -> None:
     """A dropped link during update surfaces as SolarEdgeConnectionError."""
     seed(mock_modbus_unit, FIXTURE)
     client = await SolarEdge.async_probe(mock_modbus_unit)
-    mock_modbus_connection.simulate_connection_lost()
+    mock_modbus_unit.fail_requests(ModbusConnectionError())
     with pytest.raises(SolarEdgeConnectionError):
         await client.async_update()
 
 
 async def test_probe_wraps_connection_error(
-    mock_modbus_connection: MockModbusConnection, mock_modbus_unit: MockModbusUnit
+    mock_modbus_unit: MockModbusUnit,
 ) -> None:
     """A dropped link during probe surfaces as SolarEdgeConnectionError."""
-    mock_modbus_connection.simulate_connection_lost()
+    mock_modbus_unit.fail_requests(ModbusConnectionError())
     with pytest.raises(SolarEdgeConnectionError):
         await SolarEdge.async_probe(mock_modbus_unit)
 
 
 async def test_write_wraps_connection_error(
-    mock_modbus_connection: MockModbusConnection, mock_modbus_unit: MockModbusUnit
+    mock_modbus_unit: MockModbusUnit,
 ) -> None:
     """A failed field write surfaces as SolarEdgeConnectionError, like reads."""
     seed(mock_modbus_unit, FIXTURE)
     client = await SolarEdge.async_probe(mock_modbus_unit)
     assert client.power_control is not None
-    mock_modbus_connection.simulate_connection_lost()
+    mock_modbus_unit.fail_requests(ModbusConnectionError())
 
     with pytest.raises(SolarEdgeConnectionError):
         await client.power_control.write("active_power_limit", 50)
 
 
 async def test_advanced_control_write_wraps_connection_error(
-    mock_modbus_connection: MockModbusConnection, mock_modbus_unit: MockModbusUnit
+    mock_modbus_unit: MockModbusUnit,
 ) -> None:
     """A failed direct control write (commit) also wraps the backend error."""
     seed(mock_modbus_unit, FIXTURE)
     client = await SolarEdge.async_probe(mock_modbus_unit)
     assert client.advanced_power_control is not None
-    mock_modbus_connection.simulate_connection_lost()
+    mock_modbus_unit.fail_requests(ModbusConnectionError())
 
     with pytest.raises(SolarEdgeConnectionError):
         await client.advanced_power_control.commit()

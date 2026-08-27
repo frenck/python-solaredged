@@ -99,7 +99,7 @@ async def main() -> None:
     try:
         unit = connection.for_unit(1)
         solaredge = await SolarEdge.async_probe(unit)  # detects the layout
-        await solaredge.async_update()                 # one pooled read
+        report = await solaredge.async_update()        # one read per sub-system
 
         print(solaredge.inverter.ac_power, "W")
         print(solaredge.inverter.status)
@@ -114,9 +114,16 @@ asyncio.run(main())
 
 `async_probe` validates the SunSpec header and detects which meters, batteries
 and control blocks are present, plus whether the firmware serves the grid
-status extension (not all firmware does). `async_update` refreshes every
-component in as few Modbus reads as possible. Values decode to `None` when the
-device reports a point as not implemented, including a lifetime energy of 0
+status extension (not all firmware does). `async_update` refreshes each
+sub-system on its own, so a block the device refuses fails only that
+sub-system: the returned report names what refreshed and carries the error for
+what did not, while the rest keep their values. Check `report.complete` when
+you need to know the poll was whole. A poll where nothing refreshed at all
+raises instead, the same as a dropped link. The control blocks change only when
+something writes them, so `async_update_readings` and `async_update_settings`
+refresh the two apart for a caller that wants them on different intervals.
+Values decode to `None` when the device reports a point as not implemented,
+including a lifetime energy of 0
 (SunSpec's "not accumulated", transiently reported by some firmware around
 sleep/wake). `on_grid` is `None` on firmware without the extension, and a
 battery state of energy or health outside 0-100 (reported by initializing

@@ -454,23 +454,23 @@ markers = {main = "extra == \"cli\""}
 
 [[package]]
 name = "modbus-connection"
-version = "3.8.0"
+version = "4.10.0"
 description = "A small, backend-neutral Modbus connection abstraction (pymodbus / tmodbus)."
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
 files = [
-    {file = "modbus_connection-3.8.0-py3-none-any.whl", hash = "sha256:20c7c24e88a96ffaa3f3ae1e9ebb4779d02a0140df0d14c9101c4771cedd08b3"},
-    {file = "modbus_connection-3.8.0.tar.gz", hash = "sha256:5c22998df6080615cf8ba8c6550f1c15f7576b4ba8d219b6193629dccc2a962f"},
+    {file = "modbus_connection-4.10.0-py3-none-any.whl", hash = "sha256:1a2256de5d427f89d422d1bbf52fdeda1a58e6e4f97acdb226e581dcad263700"},
+    {file = "modbus_connection-4.10.0.tar.gz", hash = "sha256:fb328d011c6268bd1e272a0600373794a07bc453d4e9358498789312e0c1e0f2"},
 ]
 
 [package.dependencies]
 pymodbus = {version = ">=3.11", extras = ["serial"], optional = true, markers = "extra == \"pymodbus\""}
-tmodbus = {version = ">=0.4.1", extras = ["async-serial", "smart"], optional = true, markers = "extra == \"tmodbus\""}
+tmodbus = {version = ">=0.6.1", extras = ["async-serial"], optional = true, markers = "extra == \"tmodbus\""}
 
 [package.extras]
 pymodbus = ["pymodbus[serial] (>=3.11)"]
-tmodbus = ["tmodbus[async-serial,smart] (>=0.4.1)"]
+tmodbus = ["tmodbus[async-serial] (>=0.6.1)"]
 
 [[package]]
 name = "packaging"
@@ -1040,24 +1040,24 @@ textual = ">=0.86.2"
 
 [[package]]
 name = "tmodbus"
-version = "0.4.1"
+version = "0.6.1"
 description = "A modern, strongly typed Modbus client library."
 optional = true
 python-versions = ">=3.12"
 groups = ["main"]
 markers = "extra == \"tmodbus\""
 files = [
-    {file = "tmodbus-0.4.1-py3-none-any.whl", hash = "sha256:b0fcc5a9735aed2deec21a4e347d9a11515978e04d18e1bd536a1819c6160eb0"},
-    {file = "tmodbus-0.4.1.tar.gz", hash = "sha256:240bd7c2081a73b895cb579e1fa61888ab5001bfc7a0987f8b331605672196b0"},
+    {file = "tmodbus-0.6.1-py3-none-any.whl", hash = "sha256:19f0dbf2f2c7d6330fa445d8543d094ef93a98e250d2829a67103bf736392c8e"},
+    {file = "tmodbus-0.6.1.tar.gz", hash = "sha256:f6f3ab9ab8cb3956fdacaebee6a387ce239927bdf0378c9abb736af84406607f"},
 ]
 
 [package.dependencies]
 serialx = {version = "*", optional = true, markers = "extra == \"async-serial\""}
-tenacity = {version = ">=8.2.0,<8.4.0 || >8.4.0", optional = true, markers = "extra == \"smart\""}
+tenacity = ">=8.2.0,<8.4.0 || >8.4.0"
 
 [package.extras]
 async-serial = ["serialx"]
-smart = ["tenacity (>=8.2.0,!=8.4.0)"]
+security = ["cryptography (>=47.0)"]
 
 [[package]]
 name = "tomlkit"
@@ -1195,4 +1195,4 @@ tmodbus = ["modbus-connection"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12"
-content-hash = "4494e3ecf210442e2ab8bdc6567c32a27a4169c27c4bd44541814c9ec8b498ec"
+content-hash = "0c5d409fe915912d5f37863f72de5a384d4f890d722ec0268326f15242d027f0"

@@ -774,6 +774,10 @@ class MpptModule(SolarEdgeComponent):
     status = integer(40148, signed=False)
 
 
+# SolarEdge inverters expose at most three DC inputs (strings).
+_MAX_MPPT_MODULES = 3
+
+
 class Mmppt(SolarEdgeComponent):
     """Multiple-MPPT extension (SunSpec model 160, base 40121).
 
@@ -781,22 +785,16 @@ class Mmppt(SolarEdgeComponent):
     count is read from the header at 40129 and sizes the ``modules`` list.
     """
 
-    # SolarEdge inverters expose at most three DC inputs (strings).
-    _MAX_MODULES = 3
-
+    # The count comes from a device register and sizes an unbounded read, so it
+    # is clamped as it decodes: a garbled or hostile device reporting a huge
+    # count would otherwise drive a massive read on every poll.
     modules = repeating_group(
-        integer(40129, signed=False, nan=0xFFFF), MpptModule, stride=20
+        NumberField(
+            40129,
+            signed=False,
+            nan=0xFFFF,
+            convert=lambda count: min(count, _MAX_MPPT_MODULES),
+        ),
+        MpptModule,
+        stride=20,
     )
-
-    async def async_update_repeating_groups(self) -> None:
-        """Read the per-module rows, clamping the device-reported module count.
-
-        The count comes from a device register and sizes an unbounded read; a
-        garbled or hostile device reporting a huge count would otherwise drive a
-        massive read on every poll. SolarEdge tops out at three strings.
-        """
-        count = self._counts.get("modules")
-        if count is not None and count > self._MAX_MODULES:
-            self._counts["modules"] = self._MAX_MODULES
-
-        await super().async_update_repeating_groups()

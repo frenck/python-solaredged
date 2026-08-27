@@ -8,7 +8,11 @@ import sys
 from typing import TYPE_CHECKING, Annotated
 
 import typer
-from modbus_connection import ModbusError, ModbusExceptionError
+from modbus_connection import (
+    IllegalDataAddressError,
+    IllegalFunctionError,
+    ModbusError,
+)
 from modbus_connection.tmodbus import connect_tcp
 from rich.console import Console
 from rich.panel import Panel
@@ -31,6 +35,7 @@ if TYPE_CHECKING:
     from enum import Enum
 
     from solaredged.components import Component, StorageControl
+    from solaredged.solaredged import UpdateReport
 
 cli = AsyncTyper(
     help="SolarEdge Modbus CLI. Run without a command to launch the live TUI.",
@@ -38,6 +43,7 @@ cli = AsyncTyper(
     add_completion=False,
 )
 console = Console()
+err_console = Console(stderr=True)
 
 Host = Annotated[
     str,
@@ -102,7 +108,9 @@ _STATUS_ICONS: dict[InverterStatus, str] = {
 
 
 @contextlib.asynccontextmanager
-async def _client(host: str, port: int, unit: int) -> AsyncIterator[SolarEdge]:
+async def _client(
+    host: str, port: int, unit: int
+) -> AsyncIterator[tuple[SolarEdge, UpdateReport]]:
     """Connect, probe and refresh a client, closing the connection after use."""
     try:
         conn = await connect_tcp(host, port=port)
@@ -113,8 +121,23 @@ async def _client(host: str, port: int, unit: int) -> AsyncIterator[SolarEdge]:
     try:
         # tmodbus's concrete unit type is not seen as the ModbusUnit protocol.
         client = await SolarEdge.async_probe(conn.for_unit(unit))  # ty: ignore[invalid-argument-type]
-        await client.async_update()
-        yield client
+        report = await client.async_update()
+
+        # This is the only poll, so a sub-system that failed it holds no values
+        # at all and every field of it reads None. That is what an unimplemented
+        # point looks like, so say which ones failed rather than let the two be
+        # confused. On stderr, to keep `info --json` machine-readable.
+        if not report.complete:
+            failed = ", ".join(
+                f"{name} ({err})" for name, err in sorted(report.failed.items())
+            )
+            err_console.print(
+                f"[yellow]⚠️  Could not read {failed}. Those values are blank "
+                f"because the read failed, not because the device reports "
+                f"nothing.[/yellow]"
+            )
+
+        yield client, report
     finally:
         await conn.close()
 
@@ -404,9 +427,14 @@ async def info_command(
     output_json: JsonFlag = False,  # noqa: FBT002
 ) -> None:
     """Show inverter status, meters and batteries."""
-    async with _client(host, port, unit) as client:
+    async with _client(host, port, unit) as (client, report):
         if output_json:
             payload = {
+                # A consumer cannot tell a failed read from an unimplemented
+                # point by looking at the values, so name what failed.
+                "failed": {
+                    name: str(err) for name, err in sorted(report.failed.items())
+                },
                 "common": _decoded(client.common),
                 "inverter": _decoded(client.inverter),
                 "mmppt": [_decoded(module) for module in client.mmppt.modules]
@@ -449,9 +477,9 @@ async def dump_command(
         for base, count in _DUMP_BLOCKS:
             try:
                 regs = await modbus_unit.read_holding_registers(base, count)
-            except ModbusExceptionError:
-                # Block not implemented on this device; skip it. A transport
-                # failure is a different error and propagates below.
+            except (IllegalDataAddressError, IllegalFunctionError):
+                # Block not implemented on this device; skip it. Any other
+                # exception response is a fault and propagates below.
                 continue
             for offset, value in enumerate(regs):
                 holding[str(base + offset)] = value
@@ -481,7 +509,7 @@ async def power_limit_command(
 ) -> None:
     """Set the inverter active power limit (percent of nominal)."""
     _confirm_write(f"active power limit {level}%", host, yes=yes)
-    async with _client(host, port, unit) as client:
+    async with _client(host, port, unit) as (client, _report):
         if client.power_control is None:
             console.print("[red]This inverter has no power control block.[/red]")
             raise typer.Exit(code=1)
@@ -509,7 +537,7 @@ async def storage_mode_command(
         console.print(f"[red]Unknown mode {mode!r}. Choose from: {choices}[/red]")
         raise typer.Exit(code=1) from None
     _confirm_write(f"storage mode {control_mode.name}", host, yes=yes)
-    async with _client(host, port, unit) as client:
+    async with _client(host, port, unit) as (client, _report):
         if client.storage_control is None:
             console.print("[red]This inverter has no storage control block.[/red]")
             raise typer.Exit(code=1)
@@ -529,7 +557,7 @@ async def cos_phi_command(
 ) -> None:
     """Set the inverter power factor (cos phi) setpoint (-1.0 to 1.0)."""
     _confirm_write(f"power factor {value}", host, yes=yes)
-    async with _client(host, port, unit) as client:
+    async with _client(host, port, unit) as (client, _report):
         if client.power_control is None:
             console.print("[red]This inverter has no power control block.[/red]")
             raise typer.Exit(code=1)
@@ -547,7 +575,7 @@ async def backup_reserve_command(
 ) -> None:
     """Set the battery backup-reserve level (percent of capacity)."""
     _confirm_write(f"backup reserve {percent}%", host, yes=yes)
-    async with _client(host, port, unit) as client:
+    async with _client(host, port, unit) as (client, _report):
         await _require_storage(client).set_backup_reserve(percent)
     console.print(f"\U0001f6e1️  [green]Backup reserve set to {percent}%.[/green]")
 
@@ -568,7 +596,7 @@ async def charge_policy_command(
         console.print(f"[red]Unknown policy {policy!r}. Choose from: {choices}[/red]")
         raise typer.Exit(code=1) from None
     _confirm_write(f"AC charge policy {value.name}", host, yes=yes)
-    async with _client(host, port, unit) as client:
+    async with _client(host, port, unit) as (client, _report):
         await _require_storage(client).set_ac_charge_policy(value)
     console.print(f"\U0001f50b [green]AC charge policy set to {value.name}.[/green]")
 
@@ -583,7 +611,7 @@ async def charge_limit_command(
 ) -> None:
     """Set the remote charge power limit (W)."""
     _confirm_write(f"charge limit {watts} W", host, yes=yes)
-    async with _client(host, port, unit) as client:
+    async with _client(host, port, unit) as (client, _report):
         await _require_storage(client).set_charge_limit(watts)
     console.print(f"\U0001f50b [green]Charge limit set to {watts} W.[/green]")
 
@@ -598,7 +626,7 @@ async def discharge_limit_command(
 ) -> None:
     """Set the remote discharge power limit (W)."""
     _confirm_write(f"discharge limit {watts} W", host, yes=yes)
-    async with _client(host, port, unit) as client:
+    async with _client(host, port, unit) as (client, _report):
         await _require_storage(client).set_discharge_limit(watts)
     console.print(f"\U0001f50b [green]Discharge limit set to {watts} W.[/green]")
 
@@ -619,7 +647,7 @@ async def remote_charge_command(  # noqa: PLR0913
     which the inverter reverts to its default mode.
     """
     _confirm_write(f"remote charge {watts} W for {timeout}s", host, yes=yes)
-    async with _client(host, port, unit) as client:
+    async with _client(host, port, unit) as (client, _report):
         storage = _require_storage(client)
         # Stage the command parameters first and switch to REMOTE_CONTROL last,
         # so a mid-sequence failure never leaves the inverter in remote control
@@ -650,7 +678,7 @@ async def remote_discharge_command(  # noqa: PLR0913
     which the inverter reverts to its default mode.
     """
     _confirm_write(f"remote discharge {watts} W for {timeout}s", host, yes=yes)
-    async with _client(host, port, unit) as client:
+    async with _client(host, port, unit) as (client, _report):
         storage = _require_storage(client)
         await _remote_control(
             storage,

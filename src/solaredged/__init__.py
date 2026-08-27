@@ -28,7 +28,7 @@ from .const import (
     SunSpecDID,
 )
 from .exceptions import SolarEdgeConnectionError, SolarEdgeError
-from .solaredged import SolarEdge
+from .solaredged import SolarEdge, UpdateReport
 
 __all__ = [
     "AdvancedPowerControl",
@@ -55,4 +55,5 @@ __all__ = [
     "StorageControlMode",
     "StorageMode",
     "SunSpecDID",
+    "UpdateReport",
 ]
