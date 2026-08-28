@@ -166,6 +166,22 @@ def test_info_json() -> None:
     assert payload["meters"] == []
 
 
+@pytest.mark.usefixtures("patch_connect")
+def test_info_json_emits_the_public_points() -> None:
+    """JSON output carries the vetted points, not the raw fields behind them.
+
+    Several points are a property over a privately named field, because the
+    raw value needs checking before it can be called a reading. Emitting that
+    raw field would hand out exactly what the property rejects.
+    """
+    result = runner.invoke(cli, ["info", "--host", "inverter.local", "--json"])
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+
+    assert "temperature_heatsink" in payload["inverter"]
+    assert not [name for name in payload["inverter"] if name.startswith("_")]
+
+
 @pytest.fixture
 def refuse_power_control(
     monkeypatch: pytest.MonkeyPatch, se17k_connection: MockModbusConnection

@@ -17,6 +17,7 @@
     }),
     'inverter': dict({
       '_grid_status': 0,
+      '_temperature_heatsink_raw': 38.88,
       'ac_current': 3.95,
       'ac_current_a': 1.31,
       'ac_current_b': 1.33,
@@ -39,7 +40,6 @@
       'did': <SunSpecDID.THREE_PHASE_INVERTER: 103>,
       'status': <InverterStatus.PRODUCING: 4>,
       'temperature_cabinet': None,
-      'temperature_heatsink': 38.88,
       'temperature_other': None,
       'temperature_transformer': None,
       'vendor_status': 0,

@@ -13,6 +13,7 @@ from modbus_connection import (
     IllegalFunctionError,
     ModbusError,
 )
+from modbus_connection.model import Component
 from modbus_connection.tmodbus import connect_tcp
 from rich.console import Console
 from rich.panel import Panel
@@ -34,7 +35,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
     from enum import Enum
 
-    from solaredged.components import Component, StorageControl
+    from solaredged.components import StorageControl
     from solaredged.solaredged import UpdateReport
 
 cli = AsyncTyper(
@@ -254,10 +255,24 @@ def _status_display(status: InverterStatus | None) -> str:
 
 
 def _decoded(component: Component) -> dict[str, object]:
-    """Return a component's decoded fields as a plain dict, for JSON output."""
+    """Return a component's decoded points as a plain dict, for JSON output.
+
+    The public surface only. A privately named field is one a property vets
+    before handing it out, and emitting the raw value alongside it would put
+    exactly what that property rejects into the output. Properties declared by
+    the library's own base classes are plumbing, not device data.
+    """
+    cls = type(component)
     # pylint: disable-next=protected-access
-    fields = type(component)._register_fields  # noqa: SLF001
-    return {name: getattr(component, name) for name in sorted(fields)}
+    names = {name for name in cls._register_fields if not name.startswith("_")}
+    names.update(
+        name
+        for klass in cls.__mro__
+        if issubclass(klass, Component) and klass is not Component
+        for name, attribute in vars(klass).items()
+        if isinstance(attribute, property) and not name.startswith("_")
+    )
+    return {name: getattr(component, name) for name in sorted(names)}
 
 
 def _fmt(value: object, unit: str = "") -> str:
