@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from modbus_connection import (
     IllegalDataAddressError,
@@ -49,7 +49,7 @@ from .const import (
 from .exceptions import SolarEdgeConnectionError, SolarEdgeError
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Coroutine, Iterator
 
     from modbus_connection import ModbusUnit
     from modbus_connection.model import Component
@@ -121,6 +121,7 @@ class SolarEdge:
         export_control: bool = False,
         power_control: bool = False,
         advanced_power_control: bool = False,
+        unresponsive_blocks: frozenset[str] = frozenset(),
     ) -> None:
         """Set up the components for the detected device layout."""
         if not 0 <= meters <= METER_COUNT:
@@ -135,6 +136,7 @@ class SolarEdge:
             raise SolarEdgeError(msg)
 
         self._unit = unit
+        self._unresponsive_blocks = unresponsive_blocks
 
         # Always present: the inverter identity and measurements. The grid
         # status extension is firmware-dependent; reading it on an inverter
@@ -214,6 +216,18 @@ class SolarEdge:
         if model is None:
             return None
         return model.startswith(EV_CHARGER_MODEL_PREFIX)
+
+    @property
+    def unresponsive_blocks(self) -> frozenset[str]:
+        """Optional blocks the device hung on while probing, instead of refusing.
+
+        A block named here is treated as absent, because nothing came back at
+        all. That is not the same fact as a clean refusal: the device stated
+        nothing, so the entities the block would have fed are missing for a
+        reason worth passing on to whoever has to explain it. Empty for a
+        device that answered every probe, refusals included.
+        """
+        return self._unresponsive_blocks
 
     async def async_update_readings(self) -> UpdateReport:
         """Refresh what the device measures: the inverter, meters and batteries."""
@@ -296,10 +310,14 @@ class SolarEdge:
         """Detect the device layout on ``unit`` and return a ready instance.
 
         Validates the SunSpec header, counts the meters, and probes for the
-        grid status extension and the battery and control blocks. Absent
-        optional blocks (which answer with a Modbus exception) are treated as
-        not present; a genuine transport failure raises
+        grid status extension and the battery and control blocks. An optional
+        block is treated as absent both when the device refuses it and when it
+        does not answer at all, the latter recorded in
+        :attr:`unresponsive_blocks`; a genuine transport failure raises
         :class:`SolarEdgeConnectionError`.
+
+        The header read is not optional, so a device that does not answer it at
+        all raises rather than presenting as an inverter with nothing attached.
         """
         try:
             header = await unit.read_holding_registers(INVERTER_COMMON_BASE, 4)
@@ -308,13 +326,39 @@ class SolarEdge:
                 msg = "Device is not a SolarEdge inverter (no SunSpec identifier)"
                 raise SolarEdgeError(msg)
 
+            unresponsive: set[str] = set()
+
             # A multiple-MPPT extension shifts the meter blocks up by its on-wire
             # size (10 + modules * 20 registers), so detect it before the meters.
-            mmppt_units = await cls._mmppt_units(unit)
+            mmppt_units = await cls._tolerate_silence(
+                cls._mmppt_units(unit),
+                absent=0,
+                name="mmppt",
+                unresponsive=unresponsive,
+            )
             meter_shift = 10 + mmppt_units * 20 if mmppt_units else 0
 
-            meters = await cls._count_meters(unit, meter_shift)
-            batteries = await cls._count_batteries(unit)
+            meters = await cls._tolerate_silence(
+                cls._count_meters(unit, meter_shift),
+                absent=0,
+                name="meters",
+                unresponsive=unresponsive,
+            )
+            batteries = await cls._tolerate_silence(
+                cls._count_batteries(unit),
+                absent=0,
+                name="batteries",
+                unresponsive=unresponsive,
+            )
+
+            async def present(name: str, address: int) -> bool:
+                """Whether an optional control block answers at all."""
+                return await cls._tolerate_silence(
+                    cls._block_present(unit, address),
+                    absent=False,
+                    name=name,
+                    unresponsive=unresponsive,
+                )
 
             return cls(
                 unit,
@@ -322,16 +366,39 @@ class SolarEdge:
                 meter_shift=meter_shift,
                 batteries=batteries,
                 mmppt=mmppt_units > 0,
-                grid_status=await cls._block_present(unit, GRID_STATUS_BASE),
-                storage_control=await cls._block_present(unit, STORAGE_CONTROL_BASE),
-                export_control=await cls._block_present(unit, EXPORT_CONTROL_BASE),
-                power_control=await cls._block_present(unit, POWER_CONTROL_BASE),
-                advanced_power_control=await cls._block_present(
-                    unit, ADVANCED_POWER_CONTROL_BASE
+                grid_status=await present("grid_status", GRID_STATUS_BASE),
+                storage_control=await present("storage_control", STORAGE_CONTROL_BASE),
+                export_control=await present("export_control", EXPORT_CONTROL_BASE),
+                power_control=await present("power_control", POWER_CONTROL_BASE),
+                advanced_power_control=await present(
+                    "advanced_power_control", ADVANCED_POWER_CONTROL_BASE
                 ),
+                unresponsive_blocks=frozenset(unresponsive),
             )
         except ModbusError as err:
             raise SolarEdgeConnectionError(str(err)) from err
+
+    @staticmethod
+    async def _tolerate_silence[T](
+        probe: Coroutine[Any, Any, T],
+        *,
+        absent: T,
+        name: str,
+        unresponsive: set[str],
+    ) -> T:
+        """Run an optional-block probe, taking silence for absence.
+
+        Some firmware stops answering a register it does not implement instead
+        of refusing it, and a probe that never returns would otherwise fail the
+        whole detection. Such a block is absent as far as reading it goes, so
+        the name is recorded rather than raised: the caller can tell a silent
+        block from a refused one without having to handle a dead device.
+        """
+        try:
+            return await probe
+        except ModbusTimeoutError:
+            unresponsive.add(name)
+            return absent
 
     @staticmethod
     async def _mmppt_units(unit: ModbusUnit) -> int:
