@@ -208,6 +208,52 @@ async def test_probe_handles_unreadable_blocks(
     assert client.power_control is None
 
 
+async def test_probe_handles_silent_blocks(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """Blocks the device never answers are absent, and are named as such.
+
+    Some firmware stops answering a register it does not implement instead of
+    refusing it. Detection has to survive that, or such a device cannot be read
+    at all.
+    """
+    seed(mock_modbus_unit, FIXTURE)
+    unit = _PickyUnit(
+        mock_modbus_unit,
+        fail_at={40113, 57344, 57348, 61440, 61696},
+        error=ModbusTimeoutError("no answer"),
+    )
+
+    client = await SolarEdge.async_probe(unit)  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
+    assert client.storage_control is None
+    assert client.export_control is None
+    assert client.power_control is None
+    assert client.advanced_power_control is None
+    assert client.inverter.on_grid is None  # no grid status extension
+    assert client.unresponsive_blocks == frozenset(
+        {
+            "advanced_power_control",
+            "export_control",
+            "grid_status",
+            "power_control",
+            "storage_control",
+        }
+    )
+
+
+async def test_probe_reports_no_unresponsive_blocks_when_refused(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """A block the device cleanly refuses is absent, but not unresponsive."""
+    seed(mock_modbus_unit, FIXTURE)
+    unit = _PickyUnit(mock_modbus_unit, fail_at={57344, 57348})
+
+    client = await SolarEdge.async_probe(unit)  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
+    assert client.storage_control is None
+    assert client.export_control is None
+    assert client.unresponsive_blocks == frozenset()
+
+
 async def test_probe_transport_error_is_not_swallowed(
     mock_modbus_unit: MockModbusUnit,
 ) -> None:
