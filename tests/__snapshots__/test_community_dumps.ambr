@@ -153,13 +153,13 @@
   dict({
     'batteries': list([
       dict({
-        '_energy_available_raw': 8800.0,
         '_energy_max_raw': 9800.0,
         '_state_of_energy_raw': 16.0,
         '_state_of_health_raw': 100.0,
         'dc_current': -0.04737443849444389,
         'dc_power': 0.0,
         'dc_voltage': 819.9321899414062,
+        'energy_available': 8800.0,
         'energy_exported': 0,
         'energy_imported': 0,
         'manufacturer': '',
@@ -268,13 +268,13 @@
   dict({
     'batteries': list([
       dict({
-        '_energy_available_raw': 22809.599609375,
         '_energy_max_raw': 23000.0,
         '_state_of_energy_raw': 66.66667175292969,
         '_state_of_health_raw': 99.0,
         'dc_current': -6.070691108703613,
         'dc_power': 5002.0,
         'dc_voltage': 822.8054809570312,
+        'energy_available': 22809.599609375,
         'energy_exported': 0,
         'energy_imported': 0,
         'manufacturer': '',
@@ -683,13 +683,13 @@
   dict({
     'batteries': list([
       dict({
-        '_energy_available_raw': 9581.759765625,
         '_energy_max_raw': 9700.0,
         '_state_of_energy_raw': 99.94781494140625,
         '_state_of_health_raw': 100.0,
         'dc_current': -0.0,
         'dc_power': 0.0,
         'dc_voltage': 403.8467102050781,
+        'energy_available': 9581.759765625,
         'energy_exported': 0,
         'energy_imported': 0,
         'manufacturer': '',
@@ -706,13 +706,13 @@
         'version': '',
       }),
       dict({
-        '_energy_available_raw': 9706.5595703125,
         '_energy_max_raw': 9700.0,
         '_state_of_energy_raw': 99.2170181274414,
         '_state_of_health_raw': 100.0,
         'dc_current': -0.0,
         'dc_power': 0.0,
         'dc_voltage': 404.8029479980469,
+        'energy_available': 9706.5595703125,
         'energy_exported': 0,
         'energy_imported': 0,
         'manufacturer': '',
@@ -977,13 +977,13 @@
   dict({
     'batteries': list([
       dict({
-        '_energy_available_raw': 9599.0400390625,
         '_energy_max_raw': 9700.0,
         '_state_of_energy_raw': 95.82250213623047,
         '_state_of_health_raw': 98.0,
         'dc_current': 0.16793091595172882,
         'dc_power': -66.0,
         'dc_voltage': 403.646728515625,
+        'energy_available': 9599.0400390625,
         'energy_exported': 0,
         'energy_imported': 0,
         'manufacturer': '',
@@ -1000,13 +1000,13 @@
         'version': '',
       }),
       dict({
-        '_energy_available_raw': 9668.16015625,
         '_energy_max_raw': 9700.0,
         '_state_of_energy_raw': 94.600830078125,
         '_state_of_health_raw': 99.0,
         'dc_current': 0.16148528456687927,
         'dc_power': -66.0,
         'dc_voltage': 402.603759765625,
+        'energy_available': 9668.16015625,
         'energy_exported': 0,
         'energy_imported': 0,
         'manufacturer': '',

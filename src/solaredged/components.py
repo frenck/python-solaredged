@@ -502,7 +502,7 @@ class Battery(SolarEdgeComponent):
     energy_imported = _battery_energy(57722)
 
     _energy_max_raw = _le_float32(57726, unit="Wh")
-    _energy_available_raw = _le_float32(57728, unit="Wh")
+    energy_available = _le_float32(57728, unit="Wh")
 
     _state_of_health_raw = _le_float32(57730, unit="%")
     _state_of_energy_raw = _le_float32(57732, unit="%")
@@ -513,22 +513,19 @@ class Battery(SolarEdgeComponent):
     def energy_max(self) -> float | None:
         """Usable capacity in watt-hours, or None when not meaningful.
 
-        A pack cannot hold more than it is rated for; a larger figure means the
-        battery has not finished reporting itself.
+        Capacity is a figure the pack is configured with, not something it
+        measures, so it cannot exceed what the pack is rated for; a larger
+        number means the battery has not finished reporting itself.
+
+        Note that :attr:`energy_available` gets no such treatment. That one is
+        a measurement, and a full pack can read a little over its nameplate:
+        the second battery in community dump issue913_u1 reports 9706.56 Wh
+        available against a 9700 Wh rating at 99.2% state of energy. Bounding
+        that by the rating would throw away a real reading, which is what the
+        rating-adjustment options seen in other integrations work around.
         """
-        return self._within_rating(self._energy_max_raw)
-
-    @property
-    def energy_available(self) -> float | None:
-        """Energy stored right now in watt-hours, or None when not meaningful.
-
-        Bounded by the pack's rating for the same reason as :attr:`energy_max`.
-        """
-        return self._within_rating(self._energy_available_raw)
-
-    def _within_rating(self, value: float | None) -> float | None:
-        """Return an energy figure, or None when it exceeds the pack's rating."""
         rated = self.rated_energy
+        value = self._energy_max_raw
         if value is None or (rated is not None and value > rated):
             return None
         return value
