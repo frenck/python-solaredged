@@ -326,12 +326,26 @@ class Inverter(SolarEdgeComponent):
     dc_power = int16(40100, scale_register=40101, unit="W")
 
     temperature_cabinet = int16(40102, scale_register=40106, unit="°C")
-    temperature_heatsink = int16(40103, scale_register=40106, unit="°C")
+    _temperature_heatsink_raw = int16(40103, scale_register=40106, unit="°C")
     temperature_transformer = int16(40104, scale_register=40106, unit="°C")
     temperature_other = int16(40105, scale_register=40106, unit="°C")
 
     status = enum16(40107, InverterStatus)
     vendor_status = uint16(40108)
+
+    @property
+    def temperature_heatsink(self) -> float | None:
+        """Heatsink temperature in degrees Celsius, or None when not measured.
+
+        A sleeping inverter reports a flat 0 rather than leaving the point
+        unimplemented, which is a firmware quirk and not a reading: an
+        inverter that is awake can legitimately sit at 0 degrees on a cold
+        morning, one that is asleep cannot know.
+        """
+        temperature = self._temperature_heatsink_raw
+        if temperature == 0 and self.status is InverterStatus.SLEEPING:
+            return None
+        return temperature
 
     @property
     def on_grid(self) -> bool | None:
@@ -487,13 +501,37 @@ class Battery(SolarEdgeComponent):
     energy_exported = _battery_energy(57718)
     energy_imported = _battery_energy(57722)
 
-    energy_max = _le_float32(57726, unit="Wh")
-    energy_available = _le_float32(57728, unit="Wh")
+    _energy_max_raw = _le_float32(57726, unit="Wh")
+    _energy_available_raw = _le_float32(57728, unit="Wh")
 
     _state_of_health_raw = _le_float32(57730, unit="%")
     _state_of_energy_raw = _le_float32(57732, unit="%")
 
     status = enum(57734, BatteryStatus, count=2, word_order="little", nan=0xFFFFFFFF)
+
+    @property
+    def energy_max(self) -> float | None:
+        """Usable capacity in watt-hours, or None when not meaningful.
+
+        A pack cannot hold more than it is rated for; a larger figure means the
+        battery has not finished reporting itself.
+        """
+        return self._within_rating(self._energy_max_raw)
+
+    @property
+    def energy_available(self) -> float | None:
+        """Energy stored right now in watt-hours, or None when not meaningful.
+
+        Bounded by the pack's rating for the same reason as :attr:`energy_max`.
+        """
+        return self._within_rating(self._energy_available_raw)
+
+    def _within_rating(self, value: float | None) -> float | None:
+        """Return an energy figure, or None when it exceeds the pack's rating."""
+        rated = self.rated_energy
+        if value is None or (rated is not None and value > rated):
+            return None
+        return value
 
     @property
     def state_of_health(self) -> float | None:

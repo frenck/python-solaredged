@@ -323,6 +323,79 @@ async def test_battery_readings(mock_modbus_unit: MockModbusUnit) -> None:
     assert battery.status is BatteryStatus.DISCHARGE
 
 
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        pytest.param(InverterStatus.SLEEPING, None, id="asleep"),
+        pytest.param(InverterStatus.PRODUCING, 0.0, id="awake"),
+    ],
+)
+async def test_zero_heatsink_temperature_only_counts_while_awake(
+    mock_modbus_unit: MockModbusUnit,
+    status: InverterStatus,
+    expected: float | None,
+) -> None:
+    """A sleeping inverter reports a flat zero instead of nothing at all.
+
+    Seen on a real device (community dump issue768_u125). An inverter that is
+    awake can legitimately sit at 0 degrees on a cold morning, so the reading
+    only drops out while it is asleep.
+    """
+    seed(mock_modbus_unit, FIXTURE)
+    mock_modbus_unit.holding[40103] = 0  # heatsink raw
+    mock_modbus_unit.holding[40106] = 0  # temperature scale factor
+    mock_modbus_unit.holding[40107] = int(status)
+
+    client = await SolarEdge.async_probe(mock_modbus_unit)
+    await client.async_update()
+
+    assert client.inverter.status is status
+    assert client.inverter.temperature_heatsink == expected
+
+
+@pytest.mark.parametrize("field", ["energy_max", "energy_available"])
+async def test_battery_energy_above_rating_is_none(
+    mock_modbus_unit: MockModbusUnit, field: str
+) -> None:
+    """A pack cannot hold more than it is rated for.
+
+    A battery that has not finished reporting itself answers with a figure
+    above its rated energy; that is not a reading.
+    """
+    seed(mock_modbus_unit, FIXTURE)
+    _seed_battery(mock_modbus_unit, offset=0)
+    address = {"energy_max": 57726, "energy_available": 57728}[field]
+    words = encode_float32(20000.0, word_order="little")  # rated energy is 10000
+    for i, word in enumerate(words):
+        mock_modbus_unit.holding[address + i] = word
+
+    client = await SolarEdge.async_probe(mock_modbus_unit)
+    await client.async_update()
+
+    battery = client.batteries[0]
+    assert battery.rated_energy == pytest.approx(10000.0)
+    assert getattr(battery, field) is None
+
+
+async def test_battery_energy_within_rating_kept(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """Energy figures at or below the pack's rating are readings."""
+    seed(mock_modbus_unit, FIXTURE)
+    _seed_battery(mock_modbus_unit, offset=0)
+    for address, value in ((57726, 10000.0), (57728, 8750.0)):
+        words = encode_float32(value, word_order="little")
+        for i, word in enumerate(words):
+            mock_modbus_unit.holding[address + i] = word
+
+    client = await SolarEdge.async_probe(mock_modbus_unit)
+    await client.async_update()
+
+    battery = client.batteries[0]
+    assert battery.energy_max == pytest.approx(10000.0)
+    assert battery.energy_available == pytest.approx(8750.0)
+
+
 @pytest.mark.parametrize("value", [-0.5, 100.5, float("inf")])
 async def test_battery_percentage_out_of_range_is_none(
     mock_modbus_unit: MockModbusUnit, value: float
