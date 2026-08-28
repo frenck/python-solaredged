@@ -399,28 +399,49 @@ async def test_zero_heatsink_temperature_only_counts_while_awake(
     assert client.inverter.temperature_heatsink == expected
 
 
-@pytest.mark.parametrize("field", ["energy_max", "energy_available"])
-async def test_battery_energy_above_rating_is_none(
-    mock_modbus_unit: MockModbusUnit, field: str
+async def test_battery_capacity_above_rating_is_none(
+    mock_modbus_unit: MockModbusUnit,
 ) -> None:
-    """A pack cannot hold more than it is rated for.
+    """A pack's usable capacity cannot exceed what it is rated for.
 
-    A battery that has not finished reporting itself answers with a figure
-    above its rated energy; that is not a reading.
+    Capacity is configured, not measured, so a battery answering above its
+    rating has not finished reporting itself.
     """
     seed(mock_modbus_unit, FIXTURE)
     _seed_battery(mock_modbus_unit, offset=0)
-    address = {"energy_max": 57726, "energy_available": 57728}[field]
     words = encode_float32(20000.0, word_order="little")  # rated energy is 10000
     for i, word in enumerate(words):
-        mock_modbus_unit.holding[address + i] = word
+        mock_modbus_unit.holding[57726 + i] = word
 
     client = await SolarEdge.async_probe(mock_modbus_unit)
     await client.async_update()
 
     battery = client.batteries[0]
     assert battery.rated_energy == pytest.approx(10000.0)
-    assert getattr(battery, field) is None
+    assert battery.energy_max is None
+
+
+async def test_battery_available_energy_above_rating_is_kept(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """Stored energy is measured, so a full pack may read over its nameplate.
+
+    The second battery in community dump issue913_u1 does exactly that: 9706.56
+    Wh available against a 9700 Wh rating at 99.2% state of energy. Bounding it
+    by the rating would throw away a real reading.
+    """
+    seed(mock_modbus_unit, FIXTURE)
+    _seed_battery(mock_modbus_unit, offset=0)
+    words = encode_float32(10006.5, word_order="little")  # rated energy is 10000
+    for i, word in enumerate(words):
+        mock_modbus_unit.holding[57728 + i] = word
+
+    client = await SolarEdge.async_probe(mock_modbus_unit)
+    await client.async_update()
+
+    battery = client.batteries[0]
+    assert battery.rated_energy == pytest.approx(10000.0)
+    assert battery.energy_available == pytest.approx(10006.5)
 
 
 async def test_battery_energy_within_rating_kept(
