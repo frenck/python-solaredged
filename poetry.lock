@@ -493,14 +493,14 @@ markers = {main = "extra == \"cli\""}
 
 [[package]]
 name = "modbus-connection"
-version = "4.12.1"
+version = "4.12.2"
 description = "A small, backend-neutral Modbus connection abstraction (pymodbus / tmodbus)."
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
 files = [
-    {file = "modbus_connection-4.12.1-py3-none-any.whl", hash = "sha256:6d7ae44d7d3fb48422a3d18df8632ae6b9e3c64172c3b5018a956ce6fad5e262"},
-    {file = "modbus_connection-4.12.1.tar.gz", hash = "sha256:041e9ab4992b1429a05b432598134a99afb5f087a86c3acc755e8d617beb10f1"},
+    {file = "modbus_connection-4.12.2-py3-none-any.whl", hash = "sha256:ec05f849be02dbc9773f9911f3d3d3e4c5d8aa3215dbc62abcd1e69d467c486c"},
+    {file = "modbus_connection-4.12.2.tar.gz", hash = "sha256:8c9e6f8ca2c4b091ec40f8f572afa4aeb64e678cc7adb6598a288d2f36a9fa96"},
 ]
 
 [package.dependencies]
