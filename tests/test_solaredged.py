@@ -919,7 +919,7 @@ async def test_export_mode_change_sees_the_device_not_the_cache(
 
 
 async def test_concurrent_export_mode_changes_keep_both(
-    mock_modbus_unit: MockModbusUnit,
+    mock_modbus_unit: MockModbusUnit, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Two changes at once do not undo each other.
 
@@ -940,7 +940,7 @@ async def test_concurrent_export_mode_changes_keep_both(
         await asyncio.sleep(0)
         await write_register(address, value)
 
-    mock_modbus_unit.write_register = write_register_slowly
+    monkeypatch.setattr(mock_modbus_unit, "write_register", write_register_slowly)
 
     await asyncio.gather(
         export.set_external_production(enabled=True),

@@ -14,7 +14,6 @@ Values decode to ``None`` when the device reports a point as unimplemented.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
 from functools import cached_property
 from typing import TYPE_CHECKING, Any
 
