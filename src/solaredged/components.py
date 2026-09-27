@@ -13,6 +13,8 @@ Values decode to ``None`` when the device reports a point as unimplemented.
 
 from __future__ import annotations
 
+import asyncio
+from functools import cached_property
 from typing import TYPE_CHECKING, Any
 
 from modbus_connection import ModbusError
@@ -257,6 +259,18 @@ class SolarEdgeComponent(Component):
         if field in self._register_fields:  # pragma: no branch
             codec = self._register_fields[field]
             self._values[field] = codec.decode(codec.encode(value))
+
+    async def _reread(self) -> None:
+        """Re-read this component, raising the library's own connection error.
+
+        ``async_update`` raises backend errors, which a whole-device poll sorts
+        out per sub-system. A setter reading on its own has no such context, so
+        it reports a failed read the way it reports a failed write.
+        """
+        try:
+            await self.async_update()
+        except ModbusError as err:
+            raise SolarEdgeConnectionError(str(err)) from err
 
     async def _write_register(self, address: int, value: int) -> None:
         """Write a single register directly, with the same error translation."""
@@ -655,10 +669,14 @@ class ExportControl(SolarEdgeComponent):
         Clears the three mode bits and sets the selected one (none for
         ``mode=None``, which disables export limiting).
         """
-        raw = (self._mode_raw or 0) & ~0b111
-        if mode is not None:
-            raw |= 1 << int(mode)
-        await self._write_mode(raw)
+
+        def select(raw: int) -> int:
+            raw &= ~0b111
+            if mode is not None:
+                raw |= 1 << int(mode)
+            return raw
+
+        await self._change_mode(select)
 
     @property
     def external_production(self) -> bool | None:
@@ -686,17 +704,29 @@ class ExportControl(SolarEdgeComponent):
 
     async def _set_mode_bit(self, bit: int, *, enabled: bool) -> None:
         """Set or clear a single bit of the export-mode register."""
-        raw = self._mode_raw or 0
-        raw = raw | (1 << bit) if enabled else raw & ~(1 << bit)
-        await self._write_mode(raw)
 
-    async def _write_mode(self, raw: int) -> None:
-        """Write the export-mode bitfield.
+        def flip(raw: int) -> int:
+            return raw | (1 << bit) if enabled else raw & ~(1 << bit)
 
-        ``write`` refreshes the decoded cache, so sequential toggles (mode + bit
-        flags) see each other's changes without an intervening ``async_update``.
+        await self._change_mode(flip)
+
+    @cached_property
+    def _mode_lock(self) -> asyncio.Lock:
+        """Serialize changes to the export-mode register."""
+        return asyncio.Lock()
+
+    async def _change_mode(self, change: Callable[[int], int]) -> None:
+        """Read the export-mode bitfield, change it, and write it back.
+
+        The mode and its flags share one register, so changing any of them is a
+        read-modify-write. Reading the cached value would lose whatever moved
+        since the last poll: another flag set here, the SolarEdge app, or an
+        installer. The read happens against the device, and one change at a
+        time, so what this writes is what it just saw plus its own change.
         """
-        await self.write("_mode_raw", raw)
+        async with self._mode_lock:
+            await self._reread()
+            await self.write("_mode_raw", change(self._mode_raw or 0))
 
     @property
     def site_limit(self) -> float | None:
