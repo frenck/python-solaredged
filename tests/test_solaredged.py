@@ -893,6 +893,63 @@ async def test_export_bit_switches(mock_modbus_unit: MockModbusUnit) -> None:
     assert mock_modbus_unit.holding[57344] == 1 | (1 << 10) | (1 << 11)
 
 
+async def test_export_mode_change_sees_the_device_not_the_cache(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """A flag set elsewhere survives a change made here.
+
+    The mode and its flags share one register, so changing one reads, modifies
+    and writes the whole thing. Anything that moved since the last poll, the
+    SolarEdge app or an installer, would be wiped by a change computed from the
+    cached value.
+    """
+    seed(mock_modbus_unit, FIXTURE)
+    mock_modbus_unit.holding[57344] = 1  # mode bit 0
+    client = await SolarEdge.async_probe(mock_modbus_unit)
+    await client.async_update()
+    export = client.export_control
+    assert export is not None
+
+    # Something else sets the negative-site-limit flag, without us polling.
+    mock_modbus_unit.holding[57344] = 1 | (1 << 11)
+
+    await export.set_external_production(enabled=True)
+
+    assert mock_modbus_unit.holding[57344] == 1 | (1 << 10) | (1 << 11)
+
+
+async def test_concurrent_export_mode_changes_keep_both(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """Two changes at once do not undo each other.
+
+    Both read the register, change a bit and write it back, so without taking
+    turns the second write carries what the first one read.
+    """
+    seed(mock_modbus_unit, FIXTURE)
+    mock_modbus_unit.holding[57344] = 0
+    client = await SolarEdge.async_probe(mock_modbus_unit)
+    await client.async_update()
+    export = client.export_control
+    assert export is not None
+
+    write_register = mock_modbus_unit.write_register
+
+    async def write_register_slowly(address: int, value: int) -> None:
+        """Write with a suspension point, which a real link has and a mock lacks."""
+        await asyncio.sleep(0)
+        await write_register(address, value)
+
+    mock_modbus_unit.write_register = write_register_slowly
+
+    await asyncio.gather(
+        export.set_external_production(enabled=True),
+        export.set_negative_site_limit(enabled=True),
+    )
+
+    assert mock_modbus_unit.holding[57344] == (1 << 10) | (1 << 11)
+
+
 async def test_external_production_max_write(mock_modbus_unit: MockModbusUnit) -> None:
     """External production max round-trips through the word-swapped float."""
     seed(mock_modbus_unit, FIXTURE)
