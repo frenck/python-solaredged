@@ -918,6 +918,26 @@ async def test_export_mode_change_sees_the_device_not_the_cache(
     assert mock_modbus_unit.holding[57344] == 1 | (1 << 10) | (1 << 11)
 
 
+async def test_export_mode_change_reports_a_failed_read(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """A read that fails mid-change surfaces as this library's own error.
+
+    Changing the mode reads the register first, and a caller catching what the
+    setters document should not have to know a backend error can come out too.
+    """
+    seed(mock_modbus_unit, FIXTURE)
+    client = await SolarEdge.async_probe(mock_modbus_unit)
+    await client.async_update()
+    export = client.export_control
+    assert export is not None
+
+    mock_modbus_unit.fail_read(57344, ModbusTimeoutError("timed out"))
+
+    with pytest.raises(SolarEdgeConnectionError):
+        await export.set_external_production(enabled=True)
+
+
 async def test_concurrent_export_mode_changes_keep_both(
     mock_modbus_unit: MockModbusUnit, monkeypatch: pytest.MonkeyPatch
 ) -> None:

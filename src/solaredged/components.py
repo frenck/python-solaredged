@@ -260,6 +260,18 @@ class SolarEdgeComponent(Component):
             codec = self._register_fields[field]
             self._values[field] = codec.decode(codec.encode(value))
 
+    async def _reread(self) -> None:
+        """Re-read this component, raising the library's own connection error.
+
+        ``async_update`` raises backend errors, which a whole-device poll sorts
+        out per sub-system. A setter reading on its own has no such context, so
+        it reports a failed read the way it reports a failed write.
+        """
+        try:
+            await self.async_update()
+        except ModbusError as err:
+            raise SolarEdgeConnectionError(str(err)) from err
+
     async def _write_register(self, address: int, value: int) -> None:
         """Write a single register directly, with the same error translation."""
         try:
@@ -713,7 +725,7 @@ class ExportControl(SolarEdgeComponent):
         time, so what this writes is what it just saw plus its own change.
         """
         async with self._mode_lock:
-            await self.async_update()
+            await self._reread()
             await self.write("_mode_raw", change(self._mode_raw or 0))
 
     @property
