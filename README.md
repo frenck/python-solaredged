@@ -135,7 +135,9 @@ batteries) decodes to `None` as well.
 Some inverters serve SunSpec model 713, a standard block with the state of
 charge, health and energy of the whole DER's storage, on `storage_capacity`.
 It appears once the inverter runs a grid profile with IEEE 1547-2018 support,
-and `async_probe` walks the device's model chain to find where it sits.
+and `async_probe` walks the device's model chain to find where it sits. That
+whole chain stays on `sunspec_models`, which is what the device says it carries
+and where; it is `None` on a device that serves no walkable chain.
 
 It is worth knowing because a number of Home Hub inverters give no Modbus
 access to the proprietary battery block at all, and on those this is the only

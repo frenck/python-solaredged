@@ -151,6 +151,13 @@ async def test_probe_real_inverter(mock_modbus_unit: MockModbusUnit) -> None:
     assert client.meters == []
     assert client.batteries == []
     assert client.storage_capacity is not None
+
+    assert client.sunspec_models is not None
+    assert [model.model_id for model in client.sunspec_models.chain] == [
+        1,
+        103,
+        *range(701, 714),
+    ]
     assert client.storage_control is not None
     assert client.export_control is not None
     assert client.power_control is not None
@@ -1720,6 +1727,7 @@ async def test_probe_tolerates_an_unwalkable_chain(
 
     client = await SolarEdge.async_probe(mock_modbus_unit)
     assert client.storage_capacity is None
+    assert client.sunspec_models is None
 
     report = await client.async_update_readings()
     assert "inverter" in report.updated

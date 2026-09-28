@@ -57,7 +57,7 @@ if TYPE_CHECKING:
 
     from modbus_connection import ModbusUnit
     from modbus_connection.model import Component
-    from modbus_connection.model.sunspec import SunSpecModel
+    from modbus_connection.model.sunspec import SunSpecModels
 
     _Pollable = Component | ComponentGroup
 
@@ -119,7 +119,7 @@ class SolarEdge:
         meter_shift: int = 0,
         batteries: int = 0,
         mmppt: bool = False,
-        storage_capacity: SunSpecModel | None = None,
+        sunspec_models: SunSpecModels | None = None,
         grid_status: bool = False,
         storage_control: bool = False,
         export_control: bool = False,
@@ -158,12 +158,22 @@ class SolarEdge:
             Battery(unit, base_offset=BATTERY_BASE_OFFSETS[i]) for i in range(batteries)
         ]
 
-        # Storage the inverter reports as a DER, wherever its model chain put it.
-        self.storage_capacity = (
-            StorageCapacity(unit, storage_capacity)
-            if storage_capacity is not None
+        self.sunspec_models = sunspec_models
+        """The device's SunSpec model chain, or None when it serves none.
+
+        What the device says it carries and where, which is the only account of
+        the blocks this library does not place at a fixed address. Worth passing
+        on: it explains which sub-devices exist, and a device that serves no
+        walkable chain says so by leaving this None.
+        """
+
+        # Storage the inverter reports as a DER, wherever the chain put it.
+        storage = (
+            sunspec_models.first(STORAGE_CAPACITY_MODEL_ID)
+            if sunspec_models is not None
             else None
         )
+        self.storage_capacity = StorageCapacity(unit, storage) if storage else None
 
         # Optional writable control blocks.
         self.storage_control = StorageControl(unit) if storage_control else None
@@ -375,10 +385,10 @@ class SolarEdge:
                 unresponsive=unresponsive,
             )
 
-            storage_capacity = await cls._tolerate_silence(
-                cls._find_storage_capacity(unit),
+            sunspec_models = await cls._tolerate_silence(
+                cls._scan_models(unit),
                 absent=None,
-                name="storage_capacity",
+                name="sunspec_models",
                 unresponsive=unresponsive,
             )
 
@@ -397,7 +407,7 @@ class SolarEdge:
                 meter_shift=meter_shift,
                 batteries=batteries,
                 mmppt=mmppt_units > 0,
-                storage_capacity=storage_capacity,
+                sunspec_models=sunspec_models,
                 grid_status=await present("grid_status", GRID_STATUS_BASE),
                 storage_control=await present("storage_control", STORAGE_CONTROL_BASE),
                 export_control=await present("export_control", EXPORT_CONTROL_BASE),
@@ -492,21 +502,17 @@ class SolarEdge:
         return count
 
     @staticmethod
-    async def _find_storage_capacity(unit: ModbusUnit) -> SunSpecModel | None:
-        """Locate the DER storage capacity block, or None when there is none.
+    async def _scan_models(unit: ModbusUnit) -> SunSpecModels | None:
+        """Walk the device's SunSpec model chain, or None when it serves none.
 
-        Nothing but the model chain knows where this block sits, so a device
-        that does not serve a walkable chain has none as far as reading goes.
         The walk steps on lengths the device reports, so a chain that is merely
         wrong runs off into unmapped registers; that refusal says the same
-        thing as a missing model.
+        thing as a device with no chain at all.
         """
         try:
-            models = await scan(unit, INVERTER_COMMON_BASE)
+            return await scan(unit, INVERTER_COMMON_BASE)
         except (IllegalDataAddressError, IllegalFunctionError, SunSpecError):
             return None
-
-        return models.first(STORAGE_CAPACITY_MODEL_ID)
 
     @staticmethod
     async def _block_present(unit: ModbusUnit, address: int) -> bool:
