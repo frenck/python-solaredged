@@ -90,6 +90,17 @@ class InverterStatus(IntEnum):
     STANDBY = 8
 
 
+# The SunSpec models a SolarEdge meter presents itself as.
+METER_DIDS = frozenset(
+    {
+        SunSpecDID.SINGLE_PHASE_METER,
+        SunSpecDID.SPLIT_PHASE_METER,
+        SunSpecDID.THREE_PHASE_WYE_METER,
+        SunSpecDID.THREE_PHASE_DELTA_METER,
+    }
+)
+
+
 class BatteryStatus(IntEnum):
     """Battery operating state (SolarEdge ``B_Status``)."""
 
