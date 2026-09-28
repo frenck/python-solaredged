@@ -361,6 +361,29 @@ def _render_meters(client: SolarEdge) -> None:
         )
 
 
+def _render_storage_capacity(client: SolarEdge) -> None:
+    """Render the DER storage capacity panel, when the device reports one."""
+    storage = client.storage_capacity
+    if storage is None:
+        return
+
+    status = storage.status.name.title() if storage.status is not None else "Unknown"
+    table = _field_table()
+    table.add_row("\U0001f50b Charge", _fmt(storage.state_of_charge, "%"))
+    table.add_row("❤️  Health", _fmt(storage.state_of_health, "%"))
+    table.add_row("\U0001f4a1 Status", status)
+    table.add_row("\U0001f4cf Rating", _fmt(storage.energy_rating, "Wh"))
+    table.add_row("\U0001f50b Available", _fmt(storage.energy_available, "Wh"))
+    console.print(
+        Panel(
+            table,
+            title="Storage capacity (DER)",
+            border_style="cyan",
+            expand=False,
+        )
+    )
+
+
 def _render_batteries(client: SolarEdge) -> None:
     """Render a panel per battery."""
     for index, battery in enumerate(client.batteries, 1):
@@ -431,6 +454,7 @@ def _render(client: SolarEdge) -> None:
     _render_strings(client)
     _render_meters(client)
     _render_batteries(client)
+    _render_storage_capacity(client)
     _render_controls(client)
 
 
@@ -457,6 +481,9 @@ async def info_command(
                 else [],
                 "meters": [_decoded(meter) for meter in client.meters],
                 "batteries": [_decoded(battery) for battery in client.batteries],
+                "storage_capacity": _decoded(client.storage_capacity)
+                if client.storage_capacity
+                else None,
                 "storage_control": _decoded(client.storage_control)
                 if client.storage_control
                 else None,

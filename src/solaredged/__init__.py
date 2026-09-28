@@ -13,6 +13,7 @@ from .components import (
     Mmppt,
     MpptModule,
     PowerControl,
+    StorageCapacity,
     StorageControl,
 )
 from .const import (
@@ -25,6 +26,7 @@ from .const import (
     StorageChargePolicy,
     StorageControlMode,
     StorageMode,
+    StorageStatus,
     SunSpecDID,
 )
 from .exceptions import SolarEdgeConnectionError, SolarEdgeError
@@ -50,10 +52,12 @@ __all__ = [
     "SolarEdge",
     "SolarEdgeConnectionError",
     "SolarEdgeError",
+    "StorageCapacity",
     "StorageChargePolicy",
     "StorageControl",
     "StorageControlMode",
     "StorageMode",
+    "StorageStatus",
     "SunSpecDID",
     "UpdateReport",
 ]

@@ -15,6 +15,7 @@ from modbus_connection import (
 )
 from modbus_connection.decode import combine_words, decode_float32
 from modbus_connection.model import ComponentGroup
+from modbus_connection.model.sunspec import SunSpecError, scan
 
 from .components import (
     AdvancedPowerControl,
@@ -26,6 +27,7 @@ from .components import (
     Meter,
     Mmppt,
     PowerControl,
+    StorageCapacity,
     StorageControl,
 )
 from .const import (
@@ -42,6 +44,7 @@ from .const import (
     MMPPT_BASE,
     MMPPT_UNITS_OFFSET,
     POWER_CONTROL_BASE,
+    STORAGE_CAPACITY_MODEL_ID,
     STORAGE_CONTROL_BASE,
     SUNSPEC_ID,
     SunSpecDID,
@@ -53,6 +56,7 @@ if TYPE_CHECKING:
 
     from modbus_connection import ModbusUnit
     from modbus_connection.model import Component
+    from modbus_connection.model.sunspec import SunSpecModel
 
     _Pollable = Component | ComponentGroup
 
@@ -68,7 +72,14 @@ _METER_DIDS = frozenset(
 # Sub-systems polled on their own, named by the attribute holding each. A name
 # holding None is absent on this device; one holding a list is polled per item,
 # so a single failing meter cannot blank the others.
-_READINGS = ("common", "inverter", "mmppt", "meters", "batteries")
+_READINGS = (
+    "common",
+    "inverter",
+    "mmppt",
+    "meters",
+    "batteries",
+    "storage_capacity",
+)
 _SETTINGS = ("_site_control", "power_control", "advanced_power_control")
 
 # The names above holding a list of sub-systems rather than one.
@@ -116,6 +127,7 @@ class SolarEdge:
         meter_shift: int = 0,
         batteries: int = 0,
         mmppt: bool = False,
+        storage_capacity: SunSpecModel | None = None,
         grid_status: bool = False,
         storage_control: bool = False,
         export_control: bool = False,
@@ -154,6 +166,13 @@ class SolarEdge:
             Battery(unit, base_offset=BATTERY_BASE_OFFSETS[i]) for i in range(batteries)
         ]
 
+        # Storage the inverter reports as a DER, wherever its model chain put it.
+        self.storage_capacity = (
+            StorageCapacity(unit, storage_capacity)
+            if storage_capacity is not None
+            else None
+        )
+
         # Optional writable control blocks.
         self.storage_control = StorageControl(unit) if storage_control else None
         self.export_control = ExportControl(unit) if export_control else None
@@ -188,6 +207,10 @@ class SolarEdge:
 
         parts.extend(self.meters)
         parts.extend(self.batteries)
+
+        if self.storage_capacity is not None:
+            parts.append(self.storage_capacity)
+
         parts.extend(
             control
             for control in (
@@ -258,6 +281,11 @@ class SolarEdge:
                 failed[name] = SolarEdgeConnectionError(str(err))
             except ModbusError as err:
                 failed[name] = SolarEdgeConnectionError(str(err))
+            except SunSpecError as err:
+                # A block whose model header no longer matches is no longer the
+                # block we discovered. The link is fine, so this fails the one
+                # sub-system rather than the poll.
+                failed[name] = SolarEdgeError(str(err))
             else:
                 updated.add(name)
 
@@ -301,6 +329,10 @@ class SolarEdge:
                 read = await target.async_read_raw(notify=False)
             except ModbusError as err:
                 raise SolarEdgeConnectionError(str(err)) from err
+            except SunSpecError as err:
+                # Reading raw still verifies each model header, so a block that
+                # has moved reports as our own error here too.
+                raise SolarEdgeError(str(err)) from err
             for space, values in read.items():
                 raw.setdefault(space, {}).update(values)
         return raw
@@ -351,6 +383,13 @@ class SolarEdge:
                 unresponsive=unresponsive,
             )
 
+            storage_capacity = await cls._tolerate_silence(
+                cls._find_storage_capacity(unit),
+                absent=None,
+                name="storage_capacity",
+                unresponsive=unresponsive,
+            )
+
             async def present(name: str, address: int) -> bool:
                 """Whether an optional control block answers at all."""
                 return await cls._tolerate_silence(
@@ -366,6 +405,7 @@ class SolarEdge:
                 meter_shift=meter_shift,
                 batteries=batteries,
                 mmppt=mmppt_units > 0,
+                storage_capacity=storage_capacity,
                 grid_status=await present("grid_status", GRID_STATUS_BASE),
                 storage_control=await present("storage_control", STORAGE_CONTROL_BASE),
                 export_control=await present("export_control", EXPORT_CONTROL_BASE),
@@ -458,6 +498,23 @@ class SolarEdge:
             count += 1
 
         return count
+
+    @staticmethod
+    async def _find_storage_capacity(unit: ModbusUnit) -> SunSpecModel | None:
+        """Locate the DER storage capacity block, or None when there is none.
+
+        Nothing but the model chain knows where this block sits, so a device
+        that does not serve a walkable chain has none as far as reading goes.
+        The walk steps on lengths the device reports, so a chain that is merely
+        wrong runs off into unmapped registers; that refusal says the same
+        thing as a missing model.
+        """
+        try:
+            models = await scan(unit, INVERTER_COMMON_BASE)
+        except (IllegalDataAddressError, IllegalFunctionError, SunSpecError):
+            return None
+
+        return models.first(STORAGE_CAPACITY_MODEL_ID)
 
     @staticmethod
     async def _block_present(unit: ModbusUnit, address: int) -> bool:

@@ -36,6 +36,21 @@ def load_registers(name: str) -> dict[int, int]:
     return {int(address): value for address, value in data["holding"].items()}
 
 
+def seed_model_chain(unit: MockModbusUnit, models: list[tuple[int, int]]) -> None:
+    """Lay a SunSpec model chain over a unit: each entry an id and data length.
+
+    The captured dumps never recorded the model-length registers, so nothing in
+    them can be walked. A chain laid here is made up, and so is any placement
+    that depends on it.
+    """
+    address = 40002
+    for model_id, length in models:
+        unit.holding.update({address: model_id, address + 1: length})
+        address += length + 2
+
+    unit.holding[address] = 0xFFFF
+
+
 def seed(unit: MockModbusUnit, name: str) -> None:
     """Seed a mock unit's holding store from a captured fixture."""
     unit.holding.update(load_registers(name))

@@ -13,6 +13,11 @@ from enum import IntEnum, IntFlag
 # The SunSpec identifier ("SunS") found at the start of the common block.
 SUNSPEC_ID = 0x53756E53
 
+# SunSpec model 713 (DER storage capacity). Not in SolarEdge's own map: it
+# appears once the inverter runs a grid profile with IEEE 1547-2018 support,
+# so its address is whatever the model chain reports.
+STORAGE_CAPACITY_MODEL_ID = 713
+
 # SolarEdge EV chargers answer on their own unit id and present as an inverter,
 # but expose no telemetry over Modbus. They are recognised by their model name.
 EV_CHARGER_MODEL_PREFIX = "SE-EV-SA"
@@ -97,6 +102,14 @@ class BatteryStatus(IntEnum):
     PRESERVE_CHARGE = 6
     IDLE = 7
     POWER_SAVING = 10
+
+
+class StorageStatus(IntEnum):
+    """Storage status of a DER (SunSpec model 713 ``Sta``)."""
+
+    OK = 0
+    WARNING = 1
+    ERROR = 2
 
 
 class StorageControlMode(IntEnum):

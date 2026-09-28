@@ -30,10 +30,11 @@ from solaredged import (
     StorageChargePolicy,
     StorageControlMode,
     StorageMode,
+    StorageStatus,
     SunSpecDID,
 )
 
-from .conftest import seed
+from .conftest import seed, seed_model_chain
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -1573,3 +1574,135 @@ async def test_update_recovers_after_transient_error(
     # The client is not wedged: a retry reads and decodes normally.
     await client.async_update()
     assert client.inverter.status is InverterStatus.PRODUCING
+
+
+# A chain for an inverter that also reports its storage as a DER: the common
+# block, the three-phase inverter model, then model 713.
+_CHAIN_WITH_STORAGE = [(1, 65), (103, 50), (713, 7)]
+_STORAGE_BASE = 40121
+
+
+async def test_probe_finds_storage_capacity(mock_modbus_unit: MockModbusUnit) -> None:
+    """Model 713 is picked up wherever the chain places it, and decodes.
+
+    The values are the ones an SE11400H with two RESU16H Prime packs reports
+    (WillCodeForCats/solaredge-modbus-multi#1055): a state of charge and
+    nothing else, every other point not implemented.
+    """
+    seed(mock_modbus_unit, FIXTURE)
+    seed_model_chain(mock_modbus_unit, _CHAIN_WITH_STORAGE)
+    mock_modbus_unit.holding.update(
+        {
+            _STORAGE_BASE + 2: 0xFFFF,  # energy rating, not implemented
+            _STORAGE_BASE + 3: 0xFFFF,  # energy available, not implemented
+            _STORAGE_BASE + 4: 5960,
+            _STORAGE_BASE + 5: 0xFFFF,  # state of health, not implemented
+            _STORAGE_BASE + 6: 0xFFFF,  # status, not implemented
+            _STORAGE_BASE + 7: 0xFFFE,  # both scale factors are -2
+            _STORAGE_BASE + 8: 0xFFFE,
+        }
+    )
+
+    client = await SolarEdge.async_probe(mock_modbus_unit)
+    assert client.storage_capacity is not None
+    assert client.storage_capacity in client.components
+    assert client.unresponsive_blocks == frozenset()
+
+    report = await client.async_update_readings()
+    assert "storage_capacity" in report.updated
+
+    storage = client.storage_capacity
+    assert storage.state_of_charge == 59.6
+    assert storage.energy_rating is None
+    assert storage.energy_available is None
+    assert storage.state_of_health is None
+    assert storage.status is None
+
+
+async def test_storage_capacity_decodes_every_point(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """A device that implements the whole model decodes all of it.
+
+    No captured device does, so this is the spec's layout rather than a
+    reading: energy scaled by WH_SF, the percentages by Pct_SF.
+    """
+    seed(mock_modbus_unit, FIXTURE)
+    seed_model_chain(mock_modbus_unit, _CHAIN_WITH_STORAGE)
+    mock_modbus_unit.holding.update(
+        {
+            _STORAGE_BASE + 2: 100,
+            _STORAGE_BASE + 3: 63,
+            _STORAGE_BASE + 4: 630,
+            _STORAGE_BASE + 5: 995,
+            _STORAGE_BASE + 6: StorageStatus.WARNING,
+            _STORAGE_BASE + 7: 2,
+            _STORAGE_BASE + 8: 0xFFFF,
+        }
+    )
+
+    client = await SolarEdge.async_probe(mock_modbus_unit)
+    assert client.storage_capacity is not None
+    await client.async_update_readings()
+
+    storage = client.storage_capacity
+    assert storage.energy_rating == 10000
+    assert storage.energy_available == 6300
+    assert storage.state_of_charge == 63.0
+    assert storage.state_of_health == 99.5
+    assert storage.status is StorageStatus.WARNING
+
+
+@pytest.mark.parametrize(
+    ("chain", "reason"),
+    [
+        pytest.param([(1, 65), (103, 50)], "no model 713", id="model-absent"),
+        pytest.param(None, "no walkable chain", id="chain-unwalkable"),
+    ],
+)
+async def test_probe_without_storage_capacity(
+    mock_modbus_unit: MockModbusUnit,
+    chain: list[tuple[int, int]] | None,
+    reason: str,
+) -> None:
+    """Without model 713 the block is absent, and that is not a failure."""
+    seed(mock_modbus_unit, FIXTURE)
+    if chain is not None:
+        seed_model_chain(mock_modbus_unit, chain)
+
+    client = await SolarEdge.async_probe(mock_modbus_unit)
+    assert client.storage_capacity is None, reason
+    assert "storage_capacity" not in client.unresponsive_blocks
+
+    report = await client.async_update_readings()
+    assert "storage_capacity" not in report.updated
+
+
+async def test_read_raw_reports_a_moved_model_as_our_own_error(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """Reading raw verifies model headers too, so diagnostics fail cleanly."""
+    seed(mock_modbus_unit, FIXTURE)
+    seed_model_chain(mock_modbus_unit, _CHAIN_WITH_STORAGE)
+    client = await SolarEdge.async_probe(mock_modbus_unit)
+    assert client.storage_capacity is not None
+
+    mock_modbus_unit.holding[_STORAGE_BASE] = 714
+
+    with pytest.raises(SolarEdgeError, match="register map has changed"):
+        await client.async_read_raw()
+
+
+async def test_storage_capacity_read_checks_the_model_header(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """A block that no longer reads as model 713 fails instead of decoding."""
+    seed(mock_modbus_unit, FIXTURE)
+    seed_model_chain(mock_modbus_unit, _CHAIN_WITH_STORAGE)
+    client = await SolarEdge.async_probe(mock_modbus_unit)
+    assert client.storage_capacity is not None
+
+    mock_modbus_unit.holding[_STORAGE_BASE] = 714
+
+    report = await client.async_update_readings()
+    assert "storage_capacity" in report.failed

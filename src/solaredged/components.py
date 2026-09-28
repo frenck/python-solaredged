@@ -33,6 +33,7 @@ from modbus_connection.model.fields import (
     StringField,
 )
 from modbus_connection.model.sunspec import (
+    SunSpecComponent,
     acc32,
     bitfield32,
     enum16,
@@ -55,6 +56,7 @@ from .const import (
     StorageChargePolicy,
     StorageControlMode,
     StorageMode,
+    StorageStatus,
     SunSpecDID,
 )
 from .exceptions import SolarEdgeConnectionError, SolarEdgeError
@@ -561,6 +563,26 @@ class Battery(SolarEdgeComponent):
         values outside 0-100; those are garbage, not readings.
         """
         return _percentage(self._state_of_energy_raw)
+
+
+class StorageCapacity(SunSpecComponent):
+    """Storage the inverter reports as a DER (SunSpec model 713).
+
+    Addresses are model-relative: the block is placed wherever the device's
+    model chain says, so build one with the discovered ``SunSpecModel``.
+
+    This is the whole DER's storage, not one pack, and it carries no identity
+    of its own. It is also not a view on the proprietary battery block: an
+    inverter may serve either, both, or one with the other empty. Notably, a
+    DER with no storage at all still reports here, with a state of charge the
+    spec fixes at 0%, so presence alone does not mean a battery is attached.
+    """
+
+    energy_rating = uint16(2, scale_register=7, unit="Wh")
+    energy_available = uint16(3, scale_register=7, unit="Wh")
+    state_of_charge = uint16(4, scale_register=8, unit="%")
+    state_of_health = uint16(5, scale_register=8, unit="%")
+    status = enum16(6, StorageStatus)
 
 
 class StorageControl(SolarEdgeComponent):
