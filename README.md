@@ -114,7 +114,8 @@ asyncio.run(main())
 
 `async_probe` validates the SunSpec header and detects which meters, batteries
 and control blocks are present, plus whether the firmware serves the grid
-status extension (not all firmware does). `async_update` refreshes each
+status extension (not all firmware does) and whether the device reports its
+storage as a DER (see below). `async_update` refreshes each
 sub-system on its own, so a block the device refuses fails only that
 sub-system: the returned report names what refreshed and carries the error for
 what did not, while the rest keep their values. Check `report.complete` when
@@ -128,6 +129,20 @@ including a lifetime energy of 0
 sleep/wake). `on_grid` is `None` on firmware without the extension, and a
 battery state of energy or health outside 0-100 (reported by initializing
 batteries) decodes to `None` as well.
+
+### Storage as a DER
+
+Some inverters serve SunSpec model 713, a standard block with the state of
+charge, health and energy of the whole DER's storage, on `storage_capacity`.
+It appears once the inverter runs a grid profile with IEEE 1547-2018 support,
+and `async_probe` walks the device's model chain to find where it sits.
+
+It is worth knowing because a number of Home Hub inverters give no Modbus
+access to the proprietary battery block at all, and on those this is the only
+place a state of charge shows up. It is not a view on that block, though: a
+device may serve either, both, or one of the two empty. Nor does its presence
+mean a battery is attached, since the spec has a DER without storage report a
+state of charge fixed at 0%.
 
 See the [examples](examples) directory for more.
 

@@ -24,6 +24,7 @@ from solaredged.const import (
     SunSpecDID,
 )
 from solaredged.exceptions import SolarEdgeConnectionError, SolarEdgeError
+from tests.conftest import seed_model_chain
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
@@ -248,6 +249,25 @@ def test_info_renders_battery_and_strings(
     assert result.exit_code == 0
     assert "Battery 1" in result.output
     assert "DC strings" in result.output
+
+
+def test_info_renders_storage_capacity(
+    patch_connect: Callable[[], MockModbusConnection],
+) -> None:
+    """The info output includes a DER storage panel when model 713 is served."""
+    unit = patch_connect().for_unit(1)
+    seed_model_chain(unit, [(1, 65), (103, 50), (713, 7)])
+    unit.holding.update(
+        {
+            40125: 630,  # state of charge, at a scale factor of -1
+            40126: 995,
+            40129: 0xFFFF,
+        }
+    )
+    result = runner.invoke(cli, ["info", "--host", "inverter.local"])
+    assert result.exit_code == 0
+    assert "Storage capacity (DER)" in result.output
+    assert "63.0 %" in result.output
 
 
 def test_power_limit_command(
