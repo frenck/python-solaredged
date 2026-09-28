@@ -1583,18 +1583,23 @@ _STORAGE_BASE = 40121
 
 
 async def test_probe_finds_storage_capacity(mock_modbus_unit: MockModbusUnit) -> None:
-    """Model 713 in the chain is picked up wherever the chain places it."""
+    """Model 713 is picked up wherever the chain places it, and decodes.
+
+    The values are the ones an SE11400H with two RESU16H Prime packs reports
+    (WillCodeForCats/solaredge-modbus-multi#1055): a state of charge and
+    nothing else, every other point not implemented.
+    """
     seed(mock_modbus_unit, FIXTURE)
     seed_model_chain(mock_modbus_unit, _CHAIN_WITH_STORAGE)
     mock_modbus_unit.holding.update(
         {
-            _STORAGE_BASE + 2: 100,  # rated 10 kWh at a scale factor of 2
-            _STORAGE_BASE + 3: 63,
-            _STORAGE_BASE + 4: 630,  # 63.0% at a scale factor of -1
-            _STORAGE_BASE + 5: 995,
-            _STORAGE_BASE + 6: StorageStatus.WARNING,
-            _STORAGE_BASE + 7: 2,
-            _STORAGE_BASE + 8: 0xFFFF,
+            _STORAGE_BASE + 2: 0xFFFF,  # energy rating, not implemented
+            _STORAGE_BASE + 3: 0xFFFF,  # energy available, not implemented
+            _STORAGE_BASE + 4: 5960,
+            _STORAGE_BASE + 5: 0xFFFF,  # state of health, not implemented
+            _STORAGE_BASE + 6: 0xFFFF,  # status, not implemented
+            _STORAGE_BASE + 7: 0xFFFE,  # both scale factors are -2
+            _STORAGE_BASE + 8: 0xFFFE,
         }
     )
 
@@ -1605,6 +1610,40 @@ async def test_probe_finds_storage_capacity(mock_modbus_unit: MockModbusUnit) ->
 
     report = await client.async_update_readings()
     assert "storage_capacity" in report.updated
+
+    storage = client.storage_capacity
+    assert storage.state_of_charge == 59.6
+    assert storage.energy_rating is None
+    assert storage.energy_available is None
+    assert storage.state_of_health is None
+    assert storage.status is None
+
+
+async def test_storage_capacity_decodes_every_point(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """A device that implements the whole model decodes all of it.
+
+    No captured device does, so this is the spec's layout rather than a
+    reading: energy scaled by WH_SF, the percentages by Pct_SF.
+    """
+    seed(mock_modbus_unit, FIXTURE)
+    seed_model_chain(mock_modbus_unit, _CHAIN_WITH_STORAGE)
+    mock_modbus_unit.holding.update(
+        {
+            _STORAGE_BASE + 2: 100,
+            _STORAGE_BASE + 3: 63,
+            _STORAGE_BASE + 4: 630,
+            _STORAGE_BASE + 5: 995,
+            _STORAGE_BASE + 6: StorageStatus.WARNING,
+            _STORAGE_BASE + 7: 2,
+            _STORAGE_BASE + 8: 0xFFFF,
+        }
+    )
+
+    client = await SolarEdge.async_probe(mock_modbus_unit)
+    assert client.storage_capacity is not None
+    await client.async_update_readings()
 
     storage = client.storage_capacity
     assert storage.energy_rating == 10000
