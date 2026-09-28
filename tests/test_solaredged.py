@@ -61,6 +61,17 @@ def _words(holding: Mapping[int, Any], *addresses: int) -> list[int]:
     return [holding[address] for address in addresses]
 
 
+def _seed_words(holding: dict[int, Any], address: int, words: list[int]) -> None:
+    """Seed consecutive registers, one key each.
+
+    The mock only fills registers that are absent when handed a list, so a
+    multi-word value laid over a captured register would keep the captured
+    neighbour and decode to something that was never on the wire.
+    """
+    for offset, word in enumerate(words):
+        holding[address + offset] = word
+
+
 def _seed_meter(unit: MockModbusUnit, index: int = 1, shift: int = 0) -> None:
     """Seed a synthetic three-phase meter at the given index (and MMPPT shift)."""
     base = shift + 174 * (index - 1)
@@ -75,8 +86,8 @@ def _seed_meter(unit: MockModbusUnit, index: int = 1, shift: int = 0) -> None:
     holding[40210 + base] = 0  # AC power SF
 
     # Real energy accumulators (Wh), sharing one scale factor.
-    holding[40226 + base] = encode_int(123000, count=2)  # exported
-    holding[40234 + base] = encode_int(456000, count=2)  # imported
+    _seed_words(holding, 40226 + base, encode_int(123000, count=2))  # exported
+    _seed_words(holding, 40234 + base, encode_int(456000, count=2))  # imported
     holding[40242 + base] = 0  # energy SF
 
 
@@ -130,11 +141,16 @@ async def test_probe_requires_sunspec(mock_modbus_unit: MockModbusUnit) -> None:
 
 
 async def test_probe_real_inverter(mock_modbus_unit: MockModbusUnit) -> None:
-    """A real SE17K dump probes to an inverter with no meters or batteries."""
+    """A real SE17K dump probes to an inverter with no meters or batteries.
+
+    The captured chain carries the 700-series DER models this firmware serves,
+    model 713 among them, on an inverter that has no battery attached.
+    """
     seed(mock_modbus_unit, FIXTURE)
     client = await SolarEdge.async_probe(mock_modbus_unit)
     assert client.meters == []
     assert client.batteries == []
+    assert client.storage_capacity is not None
     assert client.storage_control is not None
     assert client.export_control is not None
     assert client.power_control is not None
@@ -1674,29 +1690,39 @@ async def test_storage_capacity_decodes_every_point(
     assert storage.status is StorageStatus.WARNING
 
 
-@pytest.mark.parametrize(
-    ("chain", "reason"),
-    [
-        pytest.param([(1, 65), (103, 50)], "no model 713", id="model-absent"),
-        pytest.param(None, "no walkable chain", id="chain-unwalkable"),
-    ],
-)
-async def test_probe_without_storage_capacity(
+async def test_probe_without_model_713_in_the_chain(
     mock_modbus_unit: MockModbusUnit,
-    chain: list[tuple[int, int]] | None,
-    reason: str,
 ) -> None:
-    """Without model 713 the block is absent, and that is not a failure."""
+    """A device whose chain has no model 713 has no storage capacity."""
     seed(mock_modbus_unit, FIXTURE)
-    if chain is not None:
-        seed_model_chain(mock_modbus_unit, chain)
+    seed_model_chain(mock_modbus_unit, [(1, 65), (103, 50)])
 
     client = await SolarEdge.async_probe(mock_modbus_unit)
-    assert client.storage_capacity is None, reason
+    assert client.storage_capacity is None
     assert "storage_capacity" not in client.unresponsive_blocks
 
     report = await client.async_update_readings()
     assert "storage_capacity" not in report.updated
+
+
+async def test_probe_tolerates_an_unwalkable_chain(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """A chain that never terminates leaves the device without the block.
+
+    Zeroed model headers describe a model of no length, so the walk never
+    reaches the end marker. That is a device we cannot read the block on, not
+    a device that failed.
+    """
+    seed(mock_modbus_unit, FIXTURE)
+    mock_modbus_unit.holding[40002] = 0
+    mock_modbus_unit.holding[40003] = 0
+
+    client = await SolarEdge.async_probe(mock_modbus_unit)
+    assert client.storage_capacity is None
+
+    report = await client.async_update_readings()
+    assert "inverter" in report.updated
 
 
 async def test_read_raw_reports_a_moved_model_as_our_own_error(
