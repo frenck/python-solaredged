@@ -39,6 +39,7 @@ from .const import (
     GRID_STATUS_BASE,
     INVERTER_COMMON_BASE,
     METER_COUNT,
+    METER_DIDS,
     METER_MODEL_BASE,
     METER_STRIDE,
     MMPPT_BASE,
@@ -59,15 +60,6 @@ if TYPE_CHECKING:
     from modbus_connection.model.sunspec import SunSpecModel
 
     _Pollable = Component | ComponentGroup
-
-_METER_DIDS = frozenset(
-    {
-        SunSpecDID.SINGLE_PHASE_METER,
-        SunSpecDID.SPLIT_PHASE_METER,
-        SunSpecDID.THREE_PHASE_WYE_METER,
-        SunSpecDID.THREE_PHASE_DELTA_METER,
-    }
-)
 
 # Sub-systems polled on their own, named by the attribute holding each. A name
 # holding None is absent on this device; one holding a list is polled per item,
@@ -469,7 +461,7 @@ class SolarEdge:
             except (IllegalDataAddressError, IllegalFunctionError):
                 break
 
-            if did not in _METER_DIDS:
+            if did not in METER_DIDS:
                 break
 
             count += 1

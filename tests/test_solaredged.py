@@ -1576,6 +1576,27 @@ async def test_update_recovers_after_transient_error(
     assert client.inverter.status is InverterStatus.PRODUCING
 
 
+async def test_meter_read_checks_it_is_still_a_meter(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """A meter block that stops identifying as a meter fails its sub-system.
+
+    The registers still read, so without the check the poll would report a
+    refreshed meter assembled from whatever now sits there.
+    """
+    seed(mock_modbus_unit, FIXTURE)
+    mock_modbus_unit.holding[40188] = int(SunSpecDID.THREE_PHASE_WYE_METER)
+    client = await SolarEdge.async_probe(mock_modbus_unit)
+    assert len(client.meters) == 1
+    assert (await client.async_update_readings()).complete
+
+    mock_modbus_unit.holding[40188] = 0
+
+    report = await client.async_update_readings()
+    assert "meters[0]" in report.failed
+    assert "inverter" in report.updated
+
+
 # A chain for an inverter that also reports its storage as a DER: the common
 # block, the three-phase inverter model, then model 713.
 _CHAIN_WITH_STORAGE = [(1, 65), (103, 50), (713, 7)]

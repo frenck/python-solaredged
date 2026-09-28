@@ -34,6 +34,7 @@ from modbus_connection.model.fields import (
 )
 from modbus_connection.model.sunspec import (
     SunSpecComponent,
+    SunSpecMapShiftError,
     acc32,
     bitfield32,
     enum16,
@@ -46,6 +47,7 @@ from modbus_connection.model.sunspec import (
 from .const import (
     EXPORT_EXTERNAL_PRODUCTION_BIT,
     EXPORT_NEGATIVE_SITE_LIMIT_BIT,
+    METER_DIDS,
     METER_STRIDE,
     BatteryStatus,
     ExportControlLimit,
@@ -485,6 +487,21 @@ class Meter(SolarEdgeComponent):
     reactive_energy_q4 = _meter_energy(40284, 40292, "varh")
 
     events = bitfield32(40293, MeterEvent, stride=METER_STRIDE)
+
+    def _verify_read(self) -> None:
+        """Fail the read when this block no longer identifies as a meter.
+
+        A meter sits at a known slot, shifted up by whatever extension precedes
+        it. Get that shift wrong, or have the device move the block, and the
+        registers still read fine: they just describe something else. Without
+        this the poll reports a refreshed meter assembled from its neighbour.
+        """
+        if self.did not in METER_DIDS:
+            msg = (
+                f"Meter block reads as model {self.did}, not a meter"
+                " - the register map has changed"
+            )
+            raise SunSpecMapShiftError(msg)
 
 
 class Battery(SolarEdgeComponent):
