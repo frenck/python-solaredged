@@ -329,6 +329,10 @@ class SolarEdge:
                 read = await target.async_read_raw(notify=False)
             except ModbusError as err:
                 raise SolarEdgeConnectionError(str(err)) from err
+            except SunSpecError as err:
+                # Reading raw still verifies each model header, so a block that
+                # has moved reports as our own error here too.
+                raise SolarEdgeError(str(err)) from err
             for space, values in read.items():
                 raw.setdefault(space, {}).update(values)
         return raw

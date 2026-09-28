@@ -1678,6 +1678,21 @@ async def test_probe_without_storage_capacity(
     assert "storage_capacity" not in report.updated
 
 
+async def test_read_raw_reports_a_moved_model_as_our_own_error(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """Reading raw verifies model headers too, so diagnostics fail cleanly."""
+    seed(mock_modbus_unit, FIXTURE)
+    seed_model_chain(mock_modbus_unit, _CHAIN_WITH_STORAGE)
+    client = await SolarEdge.async_probe(mock_modbus_unit)
+    assert client.storage_capacity is not None
+
+    mock_modbus_unit.holding[_STORAGE_BASE] = 714
+
+    with pytest.raises(SolarEdgeError, match="register map has changed"):
+        await client.async_read_raw()
+
+
 async def test_storage_capacity_read_checks_the_model_header(
     mock_modbus_unit: MockModbusUnit,
 ) -> None:

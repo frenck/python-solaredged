@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, NamedTuple
 from modbus_connection.model.sunspec import SunSpecComponent
 from modbus_connection.model.sunspec.generate import generate_source
 
-from solaredged.components import Common, InverterExtended, Meter
+from solaredged.components import Common, InverterExtended, Meter, StorageCapacity
 
 if TYPE_CHECKING:
     from modbus_connection.model import Component
@@ -172,3 +172,13 @@ def test_meter_block_matches_sunspec() -> None:
         _generated_index("model_1.json", 40121)
         | _generated_index("model_203.json", 40188),
     )
+
+
+def test_storage_capacity_block_matches_sunspec_model_713() -> None:
+    """The DER storage block conforms to SunSpec model 713.
+
+    Its addresses are model-relative, since the chain decides where the block
+    sits, so the spec's own coordinates apply unshifted.
+    """
+    _assert_conforms(StorageCapacity, _spec_index("model_713.json", 0))
+    _assert_conforms(StorageCapacity, _generated_index("model_713.json", 0))
