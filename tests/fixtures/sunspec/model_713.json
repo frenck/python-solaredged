@@ -10,9 +10,7 @@
         "mandatory": "M",
         "name": "ID",
         "size": 1,
-        "standards": [
-          "IEEE 1547-2018"
-        ],
+        "standards": ["IEEE 1547-2018"],
         "static": "S",
         "type": "uint16",
         "value": 713
@@ -23,9 +21,7 @@
         "mandatory": "M",
         "name": "L",
         "size": 1,
-        "standards": [
-          "IEEE 1547-2018"
-        ],
+        "standards": ["IEEE 1547-2018"],
         "static": "S",
         "type": "uint16",
         "value": 7
@@ -57,9 +53,7 @@
         "name": "SoC",
         "sf": "Pct_SF",
         "size": 1,
-        "standards": [
-          "IEEE 1547-2018"
-        ],
+        "standards": ["IEEE 1547-2018"],
         "type": "uint16",
         "units": "Pct"
       },
