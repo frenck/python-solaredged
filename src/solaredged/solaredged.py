@@ -53,7 +53,7 @@ from .const import (
 from .exceptions import SolarEdgeConnectionError, SolarEdgeError
 
 if TYPE_CHECKING:
-    from collections.abc import Coroutine, Iterator
+    from collections.abc import Callable, Coroutine, Iterator
 
     from modbus_connection import ModbusUnit
     from modbus_connection.model import Component
@@ -340,7 +340,9 @@ class SolarEdge:
         return raw
 
     @classmethod
-    async def async_probe(cls, unit: ModbusUnit) -> SolarEdge:
+    async def async_probe(
+        cls, unit: ModbusUnit, *, assume_absent: frozenset[str] = frozenset()
+    ) -> SolarEdge:
         """Detect the device layout on ``unit`` and return a ready instance.
 
         Validates the SunSpec header, counts the meters, and probes for the
@@ -352,6 +354,14 @@ class SolarEdge:
 
         The header read is not optional, so a device that does not answer it at
         all raises rather than presenting as an inverter with nothing attached.
+
+        ``assume_absent`` names blocks to take for absent without asking, and is
+        reported back in :attr:`unresponsive_blocks` as though they had been
+        silent again. Pass the previous probe's ``unresponsive_blocks`` when
+        probing the same device repeatedly: a block that stays quiet costs the
+        link a full timeout every time it is asked, which on a shared link is
+        time every other unit on it spends waiting. The trade is that a block
+        named here cannot be discovered until it is probed for real again.
         """
         try:
             header = await unit.read_holding_registers(INVERTER_COMMON_BASE, 4)
@@ -365,40 +375,45 @@ class SolarEdge:
             # A multiple-MPPT extension shifts the meter blocks up by its on-wire
             # size (10 + modules * 20 registers), so detect it before the meters.
             mmppt_units = await cls._tolerate_silence(
-                cls._mmppt_units(unit),
+                lambda: cls._mmppt_units(unit),
                 absent=0,
                 name="mmppt",
                 unresponsive=unresponsive,
+                assume_absent=assume_absent,
             )
             meter_shift = 10 + mmppt_units * 20 if mmppt_units else 0
 
             meters = await cls._tolerate_silence(
-                cls._count_meters(unit, meter_shift),
+                lambda: cls._count_meters(unit, meter_shift),
                 absent=0,
                 name="meters",
                 unresponsive=unresponsive,
+                assume_absent=assume_absent,
             )
             batteries = await cls._tolerate_silence(
-                cls._count_batteries(unit),
+                lambda: cls._count_batteries(unit),
                 absent=0,
                 name="batteries",
                 unresponsive=unresponsive,
+                assume_absent=assume_absent,
             )
 
             sunspec_models = await cls._tolerate_silence(
-                cls._scan_models(unit),
+                lambda: cls._scan_models(unit),
                 absent=None,
                 name="sunspec_models",
                 unresponsive=unresponsive,
+                assume_absent=assume_absent,
             )
 
             async def present(name: str, address: int) -> bool:
                 """Whether an optional control block answers at all."""
                 return await cls._tolerate_silence(
-                    cls._block_present(unit, address),
+                    lambda: cls._block_present(unit, address),
                     absent=False,
                     name=name,
                     unresponsive=unresponsive,
+                    assume_absent=assume_absent,
                 )
 
             return cls(
@@ -422,11 +437,12 @@ class SolarEdge:
 
     @staticmethod
     async def _tolerate_silence[T](
-        probe: Coroutine[Any, Any, T],
+        probe: Callable[[], Coroutine[Any, Any, T]],
         *,
         absent: T,
         name: str,
         unresponsive: set[str],
+        assume_absent: frozenset[str] = frozenset(),
     ) -> T:
         """Run an optional-block probe, taking silence for absence.
 
@@ -436,8 +452,12 @@ class SolarEdge:
         the name is recorded rather than raised: the caller can tell a silent
         block from a refused one without having to handle a dead device.
         """
+        if name in assume_absent:
+            unresponsive.add(name)
+            return absent
+
         try:
-            return await probe
+            return await probe()
         except ModbusTimeoutError:
             unresponsive.add(name)
             return absent

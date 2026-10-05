@@ -33,6 +33,7 @@ from solaredged import (
     StorageStatus,
     SunSpecDID,
 )
+from solaredged.const import ADVANCED_POWER_CONTROL_BASE, POWER_CONTROL_BASE
 
 from .conftest import seed, seed_model_chain
 
@@ -185,6 +186,30 @@ class _PickyUnit:
     async def read_holding_registers(self, address: int, count: int) -> list[int]:
         if address in self._fail_at:
             raise self._error
+        return await self._inner.read_holding_registers(address, count)
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._inner, name)
+
+
+class _CountingUnit:
+    """Wraps a mock unit, timing out at given addresses and counting reads.
+
+    A silent block is what costs a probe its time: the error only arrives once
+    the link's timeout has run out, so what matters is whether the address is
+    asked at all.
+    """
+
+    def __init__(self, inner: MockModbusUnit, silent_at: set[int]) -> None:
+        self._inner = inner
+        self._silent_at = silent_at
+        self._timeout = ModbusTimeoutError("timed out")
+        self.reads: list[int] = []
+
+    async def read_holding_registers(self, address: int, count: int) -> list[int]:
+        self.reads.append(address)
+        if address in self._silent_at:
+            raise self._timeout
         return await self._inner.read_holding_registers(address, count)
 
     def __getattr__(self, name: str) -> object:
@@ -1761,3 +1786,31 @@ async def test_storage_capacity_read_checks_the_model_header(
 
     report = await client.async_update_readings()
     assert "storage_capacity" in report.failed
+
+
+async def test_probe_does_not_ask_blocks_it_was_told_are_absent(
+    mock_modbus_unit: MockModbusUnit,
+) -> None:
+    """A block named in ``assume_absent`` costs the link nothing.
+
+    Re-probing a block the device never answers costs a full timeout each
+    time, which on a shared link is time every other unit spends waiting.
+    """
+    seed(mock_modbus_unit, FIXTURE)
+    silent = {POWER_CONTROL_BASE, ADVANCED_POWER_CONTROL_BASE}
+    unit = _CountingUnit(mock_modbus_unit, silent)
+
+    first = await SolarEdge.async_probe(unit)  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
+    assert first.unresponsive_blocks == {"power_control", "advanced_power_control"}
+    assert silent & set(unit.reads)
+
+    unit.reads.clear()
+    again = await SolarEdge.async_probe(
+        unit,  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
+        assume_absent=first.unresponsive_blocks,
+    )
+
+    assert not silent & set(unit.reads), "a block taken for absent was asked anyway"
+    assert again.power_control is None
+    assert again.advanced_power_control is None
+    assert again.unresponsive_blocks == first.unresponsive_blocks
