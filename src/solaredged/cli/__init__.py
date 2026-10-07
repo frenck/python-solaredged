@@ -32,7 +32,7 @@ from ._sanitize import safe as _safe
 from .async_typer import AsyncTyper
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
+    from collections.abc import AsyncGenerator
     from enum import Enum
 
     from solaredged.components import StorageControl
@@ -111,7 +111,7 @@ _STATUS_ICONS: dict[InverterStatus, str] = {
 @contextlib.asynccontextmanager
 async def _client(
     host: str, port: int, unit: int
-) -> AsyncIterator[tuple[SolarEdge, UpdateReport]]:
+) -> AsyncGenerator[tuple[SolarEdge, UpdateReport], None]:
     """Connect, probe and refresh a client, closing the connection after use."""
     try:
         conn = await connect_tcp(host, port=port)
