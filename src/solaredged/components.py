@@ -375,7 +375,7 @@ class Inverter(SolarEdgeComponent):
         return None
 
     @property
-    def vendor_status_extended(self) -> int | None:
+    def vendor_status_extended(self) -> float | None:
         """The extended vendor status; None without the extension.
 
         Lives in the same extension block as the grid status;
