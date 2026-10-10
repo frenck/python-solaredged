@@ -40,7 +40,7 @@ class PowerLimitDialog(ModalScreen[int | None]):
     .modal-box Label { width: 100%; text-align: center; }
     """
 
-    BINDINGS: ClassVar[list[Binding]] = [
+    BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
         Binding("up", "adjust(1)", show=False),
         Binding("down", "adjust(-1)", show=False),
         Binding("+", "adjust(5)", show=False),
@@ -92,7 +92,7 @@ class CosPhiDialog(ModalScreen[float | None]):
     .modal-box Label { width: 100%; text-align: center; }
     """
 
-    BINDINGS: ClassVar[list[Binding]] = [
+    BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
         Binding("up", "adjust(0.1)", show=False),
         Binding("down", "adjust(-0.1)", show=False),
         Binding("escape", "cancel", "Cancel"),
@@ -142,7 +142,7 @@ class BackupReserveDialog(ModalScreen[float | None]):
     .modal-box Label { width: 100%; text-align: center; }
     """
 
-    BINDINGS: ClassVar[list[Binding]] = [
+    BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
         Binding("up", "adjust(1)", show=False),
         Binding("down", "adjust(-1)", show=False),
         Binding("+", "adjust(5)", show=False),
@@ -194,7 +194,7 @@ class StorageModeDialog(ModalScreen[StorageControlMode | None]):
     .modal-box Label { width: 100%; text-align: center; }
     """
 
-    BINDINGS: ClassVar[list[Binding]] = [
+    BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
         Binding("up", "adjust(-1)", show=False),
         Binding("down", "adjust(1)", show=False),
         Binding("escape", "cancel", "Cancel"),
@@ -304,7 +304,7 @@ class SolarEdgeTuiApp(App[None]):
     """
 
     TITLE = "☀️  SolarEdge"
-    BINDINGS: ClassVar[list[Binding]] = [
+    BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
         Binding("q", "quit", "Quit"),
         Binding("r", "refresh", "Refresh"),
         Binding("l", "power_limit", "Power limit"),
