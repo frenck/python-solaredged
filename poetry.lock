@@ -330,14 +330,14 @@ zoneinfo = ["tzdata (>=2026.5) ; sys_platform == \"emscripten\" or sys_platform 
 
 [[package]]
 name = "iniconfig"
-version = "2.3.0"
+version = "2.3.1"
 description = "brain-dead simple config-ini parsing"
 optional = false
 python-versions = ">=3.10"
 groups = ["dev"]
 files = [
-    {file = "iniconfig-2.3.0-py3-none-any.whl", hash = "sha256:f631c04d2c48c52b84d0d0549c99ff3859c98df65b3101406327ecc7d53fbf12"},
-    {file = "iniconfig-2.3.0.tar.gz", hash = "sha256:c76315c77db068650d49c5b56314774a7804df16fee4402c1f19d6d15d8c4730"},
+    {file = "iniconfig-2.3.1-py3-none-any.whl", hash = "sha256:9121e2c1fdb355232495be3194c8dfe87ccc2d5dee45947b78e68f499790d7a7"},
+    {file = "iniconfig-2.3.1.tar.gz", hash = "sha256:67f4b9c50da0dedf52af349e7749a80a9057a5031199791b906c3bb3ae878960"},
 ]
 
 [[package]]
@@ -547,14 +547,14 @@ re2 = ["google-re2 (>=1.1)"]
 
 [[package]]
 name = "platformdirs"
-version = "4.12.3"
+version = "4.13.0"
 description = "A small Python package for determining appropriate platform-specific dirs, e.g. a `user data dir`."
 optional = false
-python-versions = ">=3.10"
+python-versions = ">=3.11"
 groups = ["main", "dev"]
 files = [
-    {file = "platformdirs-4.12.3-py3-none-any.whl", hash = "sha256:080f3b39423b5abfca9a23d84c4e9795f54d395cd8459867a8ded44084fcd5f8"},
-    {file = "platformdirs-4.12.3.tar.gz", hash = "sha256:427fc0bb321ae0c5b037fa03238ca74820437be162e78b4848c4d4055b9b766c"},
+    {file = "platformdirs-4.13.0-py3-none-any.whl", hash = "sha256:3dbcf4cd708f21cf876c4eaa90e58412bc4f033d87143f41b1493ff77c25b7e1"},
+    {file = "platformdirs-4.13.0.tar.gz", hash = "sha256:1aa0b0d3f224c1f07c295121e312a5a24a180d6ae5a8425ea1784b3e3863e9c0"},
 ]
 markers = {main = "python_version < \"4.0\" and extra == \"cli\""}
 
@@ -670,15 +670,15 @@ testutils = ["gitpython (>3)"]
 
 [[package]]
 name = "pymodbus"
-version = "3.15.0"
+version = "3.16.1"
 description = "A fully featured modbus protocol stack in python"
 optional = true
 python-versions = ">=3.10.0"
 groups = ["main"]
 markers = "extra == \"pymodbus\""
 files = [
-    {file = "pymodbus-3.15.0-py3-none-any.whl", hash = "sha256:74d8dee961f23845f18a8481253183504dca05c4fcd102890cd28f4d7ce09267"},
-    {file = "pymodbus-3.15.0.tar.gz", hash = "sha256:4c5f715128bfeba59f4c9fb3542b0c32a8afd4b90081111e39c12f7af0c89aae"},
+    {file = "pymodbus-3.16.1-py3-none-any.whl", hash = "sha256:bb433f7417280bdea1190d95495aa6fb8e1fa8e0d720c436922b270bc378024c"},
+    {file = "pymodbus-3.16.1.tar.gz", hash = "sha256:19e571826dff37860afc31c845c1fd2fb72acffca02a233506b32d94fa022c33"},
 ]
 
 [package.dependencies]
@@ -686,7 +686,7 @@ pyserial = {version = ">=3.5", optional = true, markers = "extra == \"serial\""}
 
 [package.extras]
 all = ["pymodbus[development,documentation,serial,simulator]"]
-development = ["build (>=1.5.0)", "codespell (>=2.4.2)", "coverage (>=7.14.3)", "pylint (>=4.0.6)", "pytest (>=9.1.1)", "pytest-aiohttp (>=1.1.1)", "pytest-asyncio (>=1.4.0)", "pytest-cov (>=7.1.0)", "pytest-profiling (>=1.7.0) ; python_version < \"3.13\"", "pytest-timeout (>=2.3.1)", "pytest-xdist (>=3.6.1)", "ruff (>=0.15.20)", "twine (>=6.2.0)", "types-Pygments", "types-pyserial", "zuban (>=0.9.0)"]
+development = ["build (>=1.5.0)", "codespell (>=2.4.2)", "coverage (>=7.14.3)", "pylint (>=4.0.6)", "pyserial (>=3.5)", "pytest (>=9.1.1)", "pytest-aiohttp (>=1.1.1)", "pytest-asyncio (>=1.4.0)", "pytest-cov (>=7.1.0)", "pytest-profiling (>=1.7.0) ; python_version < \"3.13\"", "pytest-timeout (>=2.3.1)", "pytest-xdist (>=3.6.1)", "ruff (>=0.15.20)", "twine (>=6.2.0)", "types-Pygments", "types-pyserial", "zuban (>=0.9.0)"]
 documentation = ["Sphinx (>=7.3.7) ; python_version < \"3.12\"", "Sphinx (>=9.1.0) ; python_version >= \"3.12\"", "recommonmark (>=0.7.1)", "sphinx-rtd-theme (>=3.1.0)"]
 serial = ["pyserial (>=3.5)"]
 simulator = ["aiohttp (>=3.14.1) ; python_version >= \"3.12\"", "aiohttp (>=3.8.6) ; python_version < \"3.12\""]
@@ -1019,20 +1019,20 @@ pytest = ">=8.0.0"
 
 [[package]]
 name = "tenacity"
-version = "9.1.4"
+version = "9.2.1"
 description = "Retry code until it succeeds"
 optional = true
 python-versions = ">=3.10"
 groups = ["main"]
 markers = "extra == \"tmodbus\""
 files = [
-    {file = "tenacity-9.1.4-py3-none-any.whl", hash = "sha256:6095a360c919085f28c6527de529e76a06ad89b23659fa881ae0649b867a9d55"},
-    {file = "tenacity-9.1.4.tar.gz", hash = "sha256:adb31d4c263f2bd041081ab33b498309a57c77f9acf2db65aadf0898179cf93a"},
+    {file = "tenacity-9.2.1-py3-none-any.whl", hash = "sha256:9e56f17539296baab7beabb08b92f6ee3d7be92d8be72d763360677c2ad6580e"},
+    {file = "tenacity-9.2.1.tar.gz", hash = "sha256:a606b5c808d0cded4a359d5b9932d867ff2a6a6b64d37350260fd01bbdf83839"},
 ]
 
 [package.extras]
 doc = ["reno", "sphinx"]
-test = ["pytest", "tornado (>=4.5)", "typeguard"]
+test = ["pytest", "tornado (>=6.0)"]
 
 [[package]]
 name = "textual"
