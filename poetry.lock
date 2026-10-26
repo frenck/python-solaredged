@@ -948,20 +948,20 @@ files = [
 
 [[package]]
 name = "serialx"
-version = "1.14.0"
+version = "1.15.0"
 description = "Serial library with native sync and async support for Windows, Linux, macOS, and other platforms"
 optional = true
 python-versions = ">=3.10"
 groups = ["main"]
 markers = "extra == \"tmodbus\""
 files = [
-    {file = "serialx-1.14.0-cp310-abi3-macosx_10_12_x86_64.whl", hash = "sha256:921ef0991d73e9fc99fec18af95e627c7771356589d5dc1f5b2574b686c03ec7"},
-    {file = "serialx-1.14.0-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:90c38eddd655397842a8c3593e4cdb164ff7508bab3fb17e932188f8d0582b6f"},
-    {file = "serialx-1.14.0-cp310-abi3-win32.whl", hash = "sha256:82e2a598b89b4b00412725ed52f65b3961f6617029a2333f63c27c9fb08c1497"},
-    {file = "serialx-1.14.0-cp310-abi3-win_amd64.whl", hash = "sha256:63836a6844bd8bad5cf360738cbd701e0b32681c111976fccebd470fd55673d3"},
-    {file = "serialx-1.14.0-cp310-abi3-win_arm64.whl", hash = "sha256:c8f66e56e0e20ecc4814c170a68a1db0f3ca9ff7cf0dc66dce170f522865bd2e"},
-    {file = "serialx-1.14.0-py3-none-any.whl", hash = "sha256:3a88be02fd4318ee94fe2408edeb5322766c729a95dd318c366c0b8f7ece6338"},
-    {file = "serialx-1.14.0.tar.gz", hash = "sha256:508fbc83290b2c368cc3cc034bc2a30fa083d1bdcfae6755a1175f6ec14c8af1"},
+    {file = "serialx-1.15.0-cp310-abi3-macosx_10_12_x86_64.whl", hash = "sha256:6c4047c8f4e33c611dfe70180c2cace8aae50b4fac986e6aaa5a08e3c84d927d"},
+    {file = "serialx-1.15.0-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:87fb762209fe7e7ee603c1c75dff6c249de71c600516c03f4bdd2a35431bc35c"},
+    {file = "serialx-1.15.0-cp310-abi3-win32.whl", hash = "sha256:2bcad19510a555ffe2ccbda562bd4229c1483b39a532a1768ddb63371981d428"},
+    {file = "serialx-1.15.0-cp310-abi3-win_amd64.whl", hash = "sha256:d637b2e5f78de387d61f02d12357512919be462b81566af26d37bfcef5d9c300"},
+    {file = "serialx-1.15.0-cp310-abi3-win_arm64.whl", hash = "sha256:b80507408db8e249f65da079e30fef5d8ece720d843f76ac71b95766acb20027"},
+    {file = "serialx-1.15.0-py3-none-any.whl", hash = "sha256:bede3cf4c2de6c42de4c126184b7ad746cc8e2e22a4b5fef7854ee6870f4e2ad"},
+    {file = "serialx-1.15.0.tar.gz", hash = "sha256:89ffdae6511492157eb1e957f7f6cb0cacace088692f7477b27c4a6b6dbd4d6d"},
 ]
 
 [package.dependencies]
@@ -1071,15 +1071,15 @@ textual = ">=0.86.2"
 
 [[package]]
 name = "tmodbus"
-version = "0.6.2"
+version = "1.0.0"
 description = "A modern, strongly typed Modbus client library."
 optional = true
 python-versions = ">=3.12"
 groups = ["main"]
 markers = "extra == \"tmodbus\""
 files = [
-    {file = "tmodbus-0.6.2-py3-none-any.whl", hash = "sha256:dd4dc59247b0f3cc9ea6a7ee91e4424122ff40a6aa6bff0e4c6fbc37c5c794c0"},
-    {file = "tmodbus-0.6.2.tar.gz", hash = "sha256:4df75bf3976f32d7481ee43f91f4f8ba3e6905315caa3f1376be4024f987d6a4"},
+    {file = "tmodbus-1.0.0-py3-none-any.whl", hash = "sha256:b19f6a95a534f07427197790e93d7e07209cb68ef01a7662cbe2deedcb329d5c"},
+    {file = "tmodbus-1.0.0.tar.gz", hash = "sha256:c92af9b8f5eed6f6d63247444ae4d971b04faf887bf32286bd5852a121ce6656"},
 ]
 
 [package.dependencies]
