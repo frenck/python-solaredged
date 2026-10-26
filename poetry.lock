@@ -486,23 +486,23 @@ markers = {main = "extra == \"cli\""}
 
 [[package]]
 name = "modbus-connection"
-version = "4.12.6"
+version = "4.12.7"
 description = "A small, backend-neutral Modbus connection abstraction (pymodbus / tmodbus)."
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
 files = [
-    {file = "modbus_connection-4.12.6-py3-none-any.whl", hash = "sha256:70c96a1ff0513f8bf54c47e9a23b764b3ca8113608ec8c635bbaf77365280050"},
-    {file = "modbus_connection-4.12.6.tar.gz", hash = "sha256:2c6c28cfbe2f55b5dcce883d079312c881d93ab6c5ae9f9b248acc95147257f1"},
+    {file = "modbus_connection-4.12.7-py3-none-any.whl", hash = "sha256:4c8897acdb65233b293b531aee0212fb574a526d7242ad7e3612fb577cff7bd6"},
+    {file = "modbus_connection-4.12.7.tar.gz", hash = "sha256:794556c938e7c34ae7edeb03cae46a5e777009163e7ca866625f091b398b805b"},
 ]
 
 [package.dependencies]
 pymodbus = {version = ">=3.11", extras = ["serial"], optional = true, markers = "extra == \"pymodbus\""}
-tmodbus = {version = ">=0.6.1", extras = ["async-serial"], optional = true, markers = "extra == \"tmodbus\""}
+tmodbus = {version = ">=1.1.0", extras = ["async-serial"], optional = true, markers = "extra == \"tmodbus\""}
 
 [package.extras]
 pymodbus = ["pymodbus[serial] (>=3.11)"]
-tmodbus = ["tmodbus[async-serial] (>=0.6.1)"]
+tmodbus = ["tmodbus[async-serial] (>=1.1.0)"]
 
 [[package]]
 name = "mypy-extensions"
@@ -1071,15 +1071,15 @@ textual = ">=0.86.2"
 
 [[package]]
 name = "tmodbus"
-version = "0.6.2"
+version = "1.1.0"
 description = "A modern, strongly typed Modbus client library."
 optional = true
 python-versions = ">=3.12"
 groups = ["main"]
 markers = "extra == \"tmodbus\""
 files = [
-    {file = "tmodbus-0.6.2-py3-none-any.whl", hash = "sha256:dd4dc59247b0f3cc9ea6a7ee91e4424122ff40a6aa6bff0e4c6fbc37c5c794c0"},
-    {file = "tmodbus-0.6.2.tar.gz", hash = "sha256:4df75bf3976f32d7481ee43f91f4f8ba3e6905315caa3f1376be4024f987d6a4"},
+    {file = "tmodbus-1.1.0-py3-none-any.whl", hash = "sha256:6aa5d54c3d42a0aa3fdfc1b8562c866a565da84696f17ff0149e0abf47ee0c10"},
+    {file = "tmodbus-1.1.0.tar.gz", hash = "sha256:5ec0f216c75bf33f9c932569ad377e8e926be033cc300b90c48d4f4aff6b7b37"},
 ]
 
 [package.dependencies]
