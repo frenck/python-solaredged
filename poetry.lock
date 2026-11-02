@@ -547,14 +547,14 @@ re2 = ["google-re2 (>=1.1)"]
 
 [[package]]
 name = "platformdirs"
-version = "4.13.5"
+version = "4.14.3"
 description = "A small Python package for determining appropriate platform-specific dirs, e.g. a `user data dir`."
 optional = false
 python-versions = ">=3.11"
 groups = ["main", "dev"]
 files = [
-    {file = "platformdirs-4.13.5-py3-none-any.whl", hash = "sha256:53d3ec4280b815c1e0b02edad7f9ee8fda1ba9c0865dd9c2e6e63849ce82fc1e"},
-    {file = "platformdirs-4.13.5.tar.gz", hash = "sha256:05831adf87d392760f4b5c3a0a95579ab5a10b18b9b9bd43680dcb47544788a0"},
+    {file = "platformdirs-4.14.3-py3-none-any.whl", hash = "sha256:cba2d05fe5e18b26b1fa6f376b8e6234c012abe1f8696c486fface7d0054e931"},
+    {file = "platformdirs-4.14.3.tar.gz", hash = "sha256:021add1ab113483edbcd4694f5fbb2d688b893ea30d35e1155bb371cf4be0be8"},
 ]
 markers = {main = "python_version < \"4.0\" and extra == \"cli\""}
 
@@ -948,20 +948,20 @@ files = [
 
 [[package]]
 name = "serialx"
-version = "1.15.0"
+version = "1.15.1"
 description = "Serial library with native sync and async support for Windows, Linux, macOS, and other platforms"
 optional = true
 python-versions = ">=3.10"
 groups = ["main"]
 markers = "extra == \"tmodbus\""
 files = [
-    {file = "serialx-1.15.0-cp310-abi3-macosx_10_12_x86_64.whl", hash = "sha256:6c4047c8f4e33c611dfe70180c2cace8aae50b4fac986e6aaa5a08e3c84d927d"},
-    {file = "serialx-1.15.0-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:87fb762209fe7e7ee603c1c75dff6c249de71c600516c03f4bdd2a35431bc35c"},
-    {file = "serialx-1.15.0-cp310-abi3-win32.whl", hash = "sha256:2bcad19510a555ffe2ccbda562bd4229c1483b39a532a1768ddb63371981d428"},
-    {file = "serialx-1.15.0-cp310-abi3-win_amd64.whl", hash = "sha256:d637b2e5f78de387d61f02d12357512919be462b81566af26d37bfcef5d9c300"},
-    {file = "serialx-1.15.0-cp310-abi3-win_arm64.whl", hash = "sha256:b80507408db8e249f65da079e30fef5d8ece720d843f76ac71b95766acb20027"},
-    {file = "serialx-1.15.0-py3-none-any.whl", hash = "sha256:bede3cf4c2de6c42de4c126184b7ad746cc8e2e22a4b5fef7854ee6870f4e2ad"},
-    {file = "serialx-1.15.0.tar.gz", hash = "sha256:89ffdae6511492157eb1e957f7f6cb0cacace088692f7477b27c4a6b6dbd4d6d"},
+    {file = "serialx-1.15.1-cp310-abi3-macosx_10_12_x86_64.whl", hash = "sha256:d011884e9440c6495e2b46fa0454db15a6a8600a96e42a21f1d8cee41d3b6cc4"},
+    {file = "serialx-1.15.1-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:f4b548c1bfcd714b1f58ce8e89a6ffd6b366a85594e51a1a30ffc1056125965c"},
+    {file = "serialx-1.15.1-cp310-abi3-win32.whl", hash = "sha256:6b7e269649b5064216e87241654687237bffbfe90bb48e6dd1fca38877c139bc"},
+    {file = "serialx-1.15.1-cp310-abi3-win_amd64.whl", hash = "sha256:78cbfa9e8ddfccf52227064f26ca70d8a6426b8134ec4e53d5c8469ef8690f80"},
+    {file = "serialx-1.15.1-cp310-abi3-win_arm64.whl", hash = "sha256:7c6ec682dd5cbc9ebba8f917bde3f133794c7ef45d2de93e6ddce09583ddb799"},
+    {file = "serialx-1.15.1-py3-none-any.whl", hash = "sha256:3361542c5b85a56bf9f3ca45d0d29e92a7c63aaf7c561e2b195c3cd0dfc909b1"},
+    {file = "serialx-1.15.1.tar.gz", hash = "sha256:689dfbaf55f5f87ea0b6bcdcab135577ce1e70f98d490650b02a8b86eb0b0281"},
 ]
 
 [package.dependencies]
@@ -969,7 +969,7 @@ pywin32 = {version = "*", markers = "platform_system == \"Windows\""}
 typing-extensions = ">=4.13.0"
 
 [package.extras]
-esphome = ["aioesphomeapi (>=46.12.0) ; python_version >= \"3.11\""]
+esphome = ["aioesphomeapi (>=46.21.0) ; python_version >= \"3.11\""]
 
 [[package]]
 name = "shellingham"
