@@ -52,7 +52,7 @@ class AsyncTyper(SyncTyper):
     error_handlers: dict[type[Exception], HandleErrorFunc]
 
     # pylint: disable-next=too-many-arguments, too-many-locals
-    def callback(  # type: ignore[override] # ty: ignore[invalid-method-override] # noqa: PLR0913
+    def callback(  # type: ignore[override] # ty: ignore[incompatible-method-override] # noqa: PLR0913
         self,
         *,
         cls: type[TyperGroup] | None = None,
@@ -112,7 +112,7 @@ class AsyncTyper(SyncTyper):
         return decorator
 
     # pylint: disable-next=too-many-arguments
-    def command(  # type: ignore[override] # ty: ignore[invalid-method-override] # noqa: PLR0913
+    def command(  # type: ignore[override] # ty: ignore[incompatible-method-override] # noqa: PLR0913
         self,
         name: str | None = None,
         *,
