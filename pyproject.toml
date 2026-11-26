@@ -61,7 +61,7 @@ codespell = "2.4.3"
 covdefaults = "2.3.0"
 coverage = { version = "7.17.5", extras = ["toml"] }
 hypothesis = "6.170.17"
-ty = "0.0.108"
+ty = "0.0.111"
 pre-commit-hooks = "6.0.0"
 prek = "0.5.11"
 pylint = "4.1.4"
