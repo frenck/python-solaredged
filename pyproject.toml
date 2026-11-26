@@ -63,7 +63,7 @@ coverage = { version = "7.17.5", extras = ["toml"] }
 hypothesis = "6.170.17"
 ty = "0.0.112"
 pre-commit-hooks = "6.0.0"
-prek = "0.5.11"
+prek = "0.5.12"
 pylint = "4.1.4"
 pytest = "9.2.0"
 pytest-asyncio = "1.5.0"
